@@ -1,0 +1,20 @@
+{
+  "id": "200002",
+  "question": "Synthetic: Team Alpha vs. Team Beta",
+  "conditionId": "0x0118f8cb04259464c0e1f464f5d0d83078000000000000000000000000000000",
+  "questionID": null,
+  "slug": "synthetic-team-alpha-vs-team-beta",
+  "version": "v2",
+  "outcomes": "[\"Team Alpha\", \"Team Beta\"]",
+  "clobTokenIds": "[\"600000000000000000000000000000000000000000000000000000000000000000000000168\", \"600000000000000000000000000000000000000000000000000000000000000000000000169\"]",
+  "positionIds": [
+    "600000000000000000000000000000000000000000000000000000000000000000000000168",
+    "600000000000000000000000000000000000000000000000000000000000000000000000169"
+  ],
+  "active": true,
+  "closed": false,
+  "acceptingOrders": true,
+  "enableOrderBook": true,
+  "negRisk": false,
+  "endDate": null
+}

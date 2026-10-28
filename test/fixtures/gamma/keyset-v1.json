@@ -1,0 +1,44 @@
+{
+  "$schema": "https://gamma-api.polymarket.com/schemas/MarketsKeysetListResponse.json",
+  "markets": [
+    {
+      "id": "100001",
+      "question": "Synthetic: Will the test suite pass?",
+      "conditionId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "slug": "synthetic-will-the-test-suite-pass",
+      "version": "v1",
+      "outcomes": "[\"Yes\", \"No\"]",
+      "clobTokenIds": "[\"71321045679252212594626385532706912750332728571942532289631379312455583992563\", \"52114319501245915516055106046884209969926127482827954674443846427813813222426\"]",
+      "positionIds": ["900000000000000000000000000000000000000000000000000000000000000000000000001", "900000000000000000000000000000000000000000000000000000000000000000000000002"],
+      "active": true,
+      "closed": false,
+      "acceptingOrders": true,
+      "enableOrderBook": true,
+      "negRisk": false
+    },
+    {
+      "id": "100002",
+      "question": "Synthetic: order book disabled",
+      "conditionId": "0x3333333333333333333333333333333333333333333333333333333333333333",
+      "slug": "synthetic-book-disabled",
+      "version": "v1",
+      "outcomes": "[\"Yes\", \"No\"]",
+      "clobTokenIds": "[\"1\", \"2\"]",
+      "active": true,
+      "closed": false,
+      "acceptingOrders": false,
+      "enableOrderBook": false
+    },
+    {
+      "id": "100003",
+      "question": "Synthetic: malformed outcomes",
+      "conditionId": "0x4444444444444444444444444444444444444444444444444444444444444444",
+      "slug": "synthetic-malformed",
+      "version": "v1",
+      "outcomes": "not json",
+      "active": true,
+      "closed": false
+    }
+  ],
+  "next_cursor": "cursor-page-2"
+}
