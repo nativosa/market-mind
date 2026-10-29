@@ -11,7 +11,11 @@ export type ErrorKind =
   | "Validation"
   | "Ineligible"
   | "AssociationMismatch"
-  | "InvalidBook";
+  | "InvalidBook"
+  /** The scan was stopped: deadline, user cancellation or rate-limit circuit. */
+  | "Cancelled"
+  /** The request budget refused a request's first attempt; nothing was sent. */
+  | "BudgetExceeded";
 
 export interface ErrorDetails {
   url?: string;
@@ -19,6 +23,8 @@ export interface ErrorDetails {
   attempts?: number;
   timing?: RequestTiming;
   issues?: string[];
+  /** On a real failure (e.g. Upstream5xx): a retry was refused because the request budget was exhausted. */
+  budgetExhausted?: boolean;
 }
 
 export class MarketMindError extends Error {

@@ -1,8 +1,10 @@
 import type { InspectResult } from "../app/inspectMarket.js";
 import type { ListMarketsResult } from "../app/listMarkets.js";
+import { countScan, type ScanEntry, type ScanResult } from "../app/scanMarkets.js";
 import { decimalToString, type Decimal } from "../domain/decimal.js";
 import type { MarketMindError } from "../domain/errors.js";
 import type { Provenance } from "../domain/provenance.js";
+import { SCAN_DISCLAIMER } from "./jsonView.js";
 
 // Human-readable output. ASCII only so it renders in any Windows console code page.
 
@@ -127,6 +129,111 @@ export function formatInspect(result: InspectResult): string {
   }
 
   out.push("", result.warnings.length > 0 ? `Warnings:\n${result.warnings.map((w) => `  ${w}`).join("\n")}` : "Warnings: none");
+  return out.join("\n");
+}
+
+const MAX_TEXT_ENTRIES = 25;
+const codes = (e: ScanEntry) => e.reasons.map((r) => r.code).join(",");
+
+function entryLines(entries: readonly ScanEntry[], detail: boolean): string[] {
+  const shown = entries.slice(0, MAX_TEXT_ENTRIES).map((e) => {
+    const head = `  ${e.gammaId ?? "(no id)"}  ${codes(e)}`;
+    const why = detail ? `  ${e.reasons.map((r) => r.detail).join("; ")}` : "";
+    return truncate(`${head}${why}  ${e.market ? `"${e.market.question}"` : ""}`.trimEnd(), 160);
+  });
+  if (entries.length > MAX_TEXT_ENTRIES) shown.push(`  ... ${entries.length - MAX_TEXT_ENTRIES} more (see --json)`);
+  return shown;
+}
+
+/** Markets per reason code (a market with several reasons counts once under each). */
+function countByCode(entries: readonly ScanEntry[]): string {
+  const counts = new Map<string, number>();
+  for (const e of entries) for (const code of new Set(e.reasons.map((r) => r.code))) counts.set(code, (counts.get(code) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([c, n]) => `${c} ${n}`)
+    .join(", ");
+}
+
+export function formatScan(result: ScanResult): string {
+  const o = result.options;
+  const c = countScan(result);
+  const bucket = (b: ScanEntry["bucket"]) => result.entries.filter((e) => e.bucket === b);
+  const w = result.window;
+  const out = [
+    `Polymarket scan  protocol=${o.version}  discover-order=${o.discoverOrder}  status=${result.status.toUpperCase()}` +
+      (result.stopReasons.length > 0 ? `  stopped: ${result.stopReasons.join(", ")}` : ""),
+    SCAN_DISCLAIMER,
+    w
+      ? `Observed between ${w.firstRequestStartedAt} and ${w.lastResponseReceivedAt} as independent requests (not an atomic snapshot).`
+      : "No requests completed.",
+    `Filters: spread >= ${dec(o.filters.minSpread)}, top-of-book size >= ${dec(o.filters.minTopSize)} shares, ` +
+      `suspicious books ${o.filters.includeSuspicious ? "admitted" : "filtered"}; crossed/locked/empty/one-sided books excluded`,
+    `Discovery: ${result.discovery.pages} page(s), ${result.discovery.recordsReceived} record(s) received, ${c.discovered} unique, ` +
+      `${result.discovery.duplicates.length} duplicate(s); stopped: ${result.discovery.stoppedBecause}` +
+      (o.discoverOrder === "volume24hr" ? "; selection order = Gamma volume24hr desc (not used for ranking)" : "; Gamma default order"),
+    `Requests: ${result.budget.used} of ${result.budget.limit} budget (${result.requests.length} logged)`,
+    "",
+  ];
+
+  const shown = result.ranked.slice(0, o.top);
+  out.push(`Ranked candidates (showing ${shown.length} of ${c.rankedTotal})`);
+  if (shown.length === 0) out.push("  (none)");
+  else {
+    out.push(
+      table(
+        ["#", "ID", "REF OUTCOME", "BID", "ASK", "SPREAD", "TOP SIZE", "MID", "QUALITY", "VOL24H*", "QUESTION"],
+        shown.map((e, i) => {
+          const m = e.metrics!;
+          return [
+            String(i + 1),
+            e.gammaId!,
+            truncate(m.reference.label, 16),
+            dec(m.bestBid?.price),
+            dec(m.bestAsk?.price),
+            dec(m.spread),
+            dec(m.topSize),
+            dec(m.midpoint),
+            m.quality,
+            e.market!.volume24hr === null ? NONE : e.market!.volume24hr.toFixed(0),
+            truncate(e.market!.question, 50),
+          ];
+        }),
+      ),
+      "  * Gamma-reported 24h volume: selection order only, not a liquidity measure.",
+      "",
+      "Why ranked",
+    );
+    for (const [i, e] of shown.entries()) out.push(`  ${i + 1}. ${e.gammaId}: ${e.explanation.join("; ")}`);
+  }
+
+  out.push(
+    "",
+    `Accounting: discovered ${c.discovered} = ranked ${c.rankedTotal} + filtered ${c.filtered} + excluded ${c.excluded} + failed ${c.failed} + not scanned ${c.notScanned}`,
+    `  eligible ${c.eligible}, inspected ${c.selected}`,
+  );
+  const filtered = bucket("filtered");
+  if (filtered.length > 0) out.push("", `Filtered (${filtered.length})`, ...entryLines(filtered, true));
+  const excluded = bucket("excluded");
+  if (excluded.length > 0) {
+    const inspected = excluded.filter((e) => e.selected);
+    out.push("", `Excluded (${excluded.length}): ${countByCode(excluded)}`);
+    if (inspected.length > 0) out.push("  inspected but structurally unsuitable:", ...entryLines(inspected, true));
+  }
+  const failed = bucket("failed");
+  if (failed.length > 0) out.push("", `Failed (${failed.length})`, ...entryLines(failed, true));
+  const notScanned = bucket("notScanned");
+  if (notScanned.length > 0) out.push("", `Not scanned (${notScanned.length}): ${countByCode(notScanned)}`);
+
+  const warnings = [...result.ranked.slice(0, o.top), ...filtered].flatMap((e) =>
+    e.warnings.filter((x) => x.code !== "BOOK_QUALITY_ISSUE").map((x) => `  ${e.gammaId}  ${x.code}: ${x.detail}`),
+  );
+  const discoveryWarnings = [
+    ...result.discovery.warnings.map((x) => `  ${x}`),
+    ...result.discovery.duplicates.map((d) => `  DUPLICATE_RECORD: market ${d.gammaId} repeated on page ${d.page}, counted once`),
+  ];
+  const all = [...discoveryWarnings, ...warnings];
+  out.push("", all.length > 0 ? ["Warnings", ...all.slice(0, MAX_TEXT_ENTRIES)].join("\n") : "Warnings: none");
   return out.join("\n");
 }
 

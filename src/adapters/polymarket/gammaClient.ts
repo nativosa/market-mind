@@ -5,10 +5,15 @@ import { GammaKeysetPageSchema, GammaMarketSchema } from "./gammaSchemas.js";
 import type { HttpClient } from "./httpClient.js";
 import { toMarket, validate } from "./normalize.js";
 
+/** Gamma keyset `order` fields verified live (2026-10-29). `volume_num`, the documented example, is rejected with 422. */
+export type DiscoveryOrder = "volume24hr";
+
 export interface ListMarketsQuery {
   limit: number;
   version: ProtocolVersion;
   cursor?: string;
+  /** Server-side ordering, always descending. Omitted -> Gamma's default order (Stage 1 URL). */
+  order?: DiscoveryOrder;
 }
 
 export interface SkippedMarket {
@@ -31,8 +36,12 @@ export interface GammaClient {
 
 export function createGammaClient(http: HttpClient, baseUrl: string): GammaClient {
   return {
-    async listOpenMarkets({ limit, version, cursor }) {
+    async listOpenMarkets({ limit, version, cursor, order }) {
       const params = new URLSearchParams({ closed: "false", limit: String(limit), version });
+      if (order) {
+        params.set("order", order);
+        params.set("ascending", "false");
+      }
       if (cursor) params.set("after_cursor", cursor);
       const { body, provenance } = await http.getJson("gamma", "/markets/keyset", `${baseUrl}/markets/keyset?${params.toString()}`);
       const page = validate(GammaKeysetPageSchema, body, "Gamma /markets/keyset response", provenance);

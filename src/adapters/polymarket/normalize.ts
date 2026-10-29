@@ -68,6 +68,7 @@ export function toMarket(raw: GammaMarket, provenance: Provenance): Market {
     clobTokenIds: parseJsonStringArray(raw.clobTokenIds, "clobTokenIds"),
     positionIds: raw.positionIds ?? null,
     endDate: raw.endDate ?? null,
+    volume24hr: raw.volume24hr ?? null,
     provenance,
   };
 }

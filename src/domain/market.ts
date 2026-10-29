@@ -22,6 +22,8 @@ export interface Market {
   /** Gamma `positionIds`. CLOB asset IDs for v2 (Protocol V2) markets only. */
   positionIds: string[] | null;
   endDate: string | null;
+  /** Gamma-reported 24h volume. Informational and discovery-order only; never a liquidity measure. */
+  volume24hr: number | null;
   provenance: Provenance;
 }
 

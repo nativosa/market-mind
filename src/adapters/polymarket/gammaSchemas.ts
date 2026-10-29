@@ -19,6 +19,7 @@ export const GammaMarketSchema = z.object({
   enableOrderBook: z.boolean().nullish(),
   negRisk: z.boolean().nullish(),
   endDate: z.string().nullish(),
+  volume24hr: z.number().nullish(),
 });
 export type GammaMarket = z.infer<typeof GammaMarketSchema>;
 

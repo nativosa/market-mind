@@ -16,6 +16,8 @@ export default defineConfig({
         "src/domain/**": { lines: 90, statements: 90, functions: 90, branches: 85 },
         "src/analytics/**": { lines: 90, statements: 90, functions: 90, branches: 85 },
         "src/adapters/polymarket/normalize.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
+        "src/adapters/polymarket/requestBudget.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
+        "src/app/scanMarkets.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
       },
     },
   },

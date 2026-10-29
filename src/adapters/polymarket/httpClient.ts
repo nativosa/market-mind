@@ -1,12 +1,18 @@
 import { MarketMindError, type ErrorKind } from "../../domain/errors.js";
 import type { DataSource, Provenance, RequestTiming } from "../../domain/provenance.js";
+import type { RequestPermit } from "./requestBudget.js";
 
 export type FetchFn = (input: string, init: RequestInit) => Promise<Response>;
 
 export interface HttpDeps {
   fetch: FetchFn;
-  sleep: (ms: number) => Promise<void>;
+  /** Backoff wait. Should resolve early when `signal` aborts. */
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   now: () => Date;
+  /** Optional: every attempt (retries included) must be granted by this permit first. */
+  budget?: RequestPermit;
+  /** Optional: aborting it cancels in-flight requests and stops all further attempts. */
+  signal?: AbortSignal;
 }
 
 export interface HttpOptions {
@@ -29,7 +35,17 @@ export interface HttpClient {
 
 export const realHttpDeps: HttpDeps = {
   fetch: (input, init) => fetch(input, init),
-  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  sleep: (ms, signal) =>
+    new Promise((resolve) => {
+      if (signal?.aborted) return resolve();
+      const done = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      signal?.addEventListener("abort", done, { once: true });
+    }),
   now: () => new Date(),
 };
 
@@ -48,8 +64,17 @@ export function createHttpClient(options: HttpOptions, deps: HttpDeps): HttpClie
       let firstAttemptStartedAt: Date | null = null;
       let failure: AttemptFailure | null = null;
       let timing: RequestTiming | undefined;
+      let budgetExhausted = false;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (deps.signal?.aborted) throw cancelled(url, deps.signal, timing);
+        if (deps.budget && !deps.budget.tryAcquire()) {
+          if (attempt === 1) {
+            throw new MarketMindError("BudgetExceeded", `Request budget exhausted before ${endpoint}`, { url, attempts: 0 });
+          }
+          budgetExhausted = true;
+          break;
+        }
         const startedAt = deps.now();
         firstAttemptStartedAt ??= startedAt;
         const stamp = (receivedAt: Date, response: Response | null): RequestTiming => ({
@@ -67,15 +92,16 @@ export function createHttpClient(options: HttpOptions, deps: HttpDeps): HttpClie
           response = await deps.fetch(url, {
             method: "GET",
             headers: { accept: "application/json", "user-agent": options.userAgent },
-            signal: AbortSignal.timeout(options.timeoutMs),
+            signal: deps.signal ? AbortSignal.any([AbortSignal.timeout(options.timeoutMs), deps.signal]) : AbortSignal.timeout(options.timeoutMs),
           });
           text = await response.text();
         } catch (error) {
           timing = stamp(deps.now(), null);
+          if (deps.signal?.aborted) throw cancelled(url, deps.signal, timing);
           failure = isTimeout(error)
             ? { kind: "Timeout", message: `Request timed out after ${options.timeoutMs} ms`, retryable: true }
             : { kind: "Network", message: `Network error: ${describe(error)}`, retryable: true };
-          if (attempt < maxAttempts) await deps.sleep(backoff(options, attempt));
+          if (attempt < maxAttempts) await deps.sleep(backoff(options, attempt), deps.signal);
           continue;
         }
 
@@ -96,7 +122,7 @@ export function createHttpClient(options: HttpOptions, deps: HttpDeps): HttpClie
 
         failure = classifyStatus(response, text, options);
         if (!failure.retryable || attempt === maxAttempts) break;
-        await deps.sleep(failure.retryAfterMs ?? backoff(options, attempt));
+        await deps.sleep(failure.retryAfterMs ?? backoff(options, attempt), deps.signal);
       }
 
       const f = failure!;
@@ -105,9 +131,17 @@ export function createHttpClient(options: HttpOptions, deps: HttpDeps): HttpClie
         ...(f.status !== undefined ? { status: f.status } : {}),
         attempts: timing!.attempts,
         timing: timing!,
+        ...(budgetExhausted ? { budgetExhausted } : {}),
       });
     },
   };
+}
+
+function cancelled(url: string, signal: AbortSignal, timing: RequestTiming | undefined): MarketMindError {
+  return new MarketMindError("Cancelled", `Request cancelled: ${describe(signal.reason)}`, {
+    url,
+    ...(timing ? { attempts: timing.attempts, timing } : { attempts: 0 }),
+  });
 }
 
 function classifyStatus(response: Response, text: string, options: HttpOptions): AttemptFailure {
