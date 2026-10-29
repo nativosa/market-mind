@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   maxRetries: 2,
   baseBackoffMs: 500,
   maxRetryAfterMs: 5_000,
-  userAgent: "market-mind/0.1 (read-only educational explorer)",
+  userAgent: "market-mind/0.2.0 (read-only educational explorer)",
 };
 
 const intFromEnv = (min: number, max: number) => z.coerce.number().int().min(min).max(max);
