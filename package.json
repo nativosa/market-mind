@@ -1,6 +1,6 @@
 {
   "name": "market-mind",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Read-only Polymarket API explorer with deterministic order-book analytics (educational project).",
   "license": "MIT",
   "private": true,
@@ -10,6 +10,7 @@
   },
   "scripts": {
     "cli": "tsx src/cli/main.ts",
+    "mcp": "node bin/marketmind-mcp.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -18,11 +19,13 @@
     "smoke": "vitest run --config vitest.live.config.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
     "big.js": "7.0.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/client": "2.3.1",
     "@types/big.js": "7.0.0",
     "@types/node": "24.19.2",
     "@vitest/coverage-v8": "5.0.5",

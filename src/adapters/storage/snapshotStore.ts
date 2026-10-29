@@ -10,6 +10,7 @@ import {
   pairingOf,
   type AccountingStatus,
   type HistoryPoint,
+  type ObservationDetail,
   type ObservationRecord,
   type RunRecord,
   type RunStatus,
@@ -532,37 +533,39 @@ const RunRow = z.object({
 const parseJson = <T>(value: string | null): T | null => (value === null ? null : (JSON.parse(value) as T));
 
 export function listRuns(db: Database, limit: number): RunRecord[] {
-  return all(db, "SELECT * FROM collection_run ORDER BY started_at DESC, rowid DESC LIMIT ?", limit).map((raw) => {
-    const r = RunRow.parse(raw);
-    return {
-      runId: r.run_id,
-      sourceType: r.source_type,
-      status: r.status,
-      accounting: r.accounting,
-      startedAt: r.started_at,
-      finishedAt: r.finished_at,
-      ownerPid: r.owner_pid,
-      ownerHost: r.owner_host,
-      heartbeatAt: r.heartbeat_at,
-      heartbeatMs: r.heartbeat_ms,
-      appVersion: r.app_version,
-      buildId: r.build_id,
-      schemaVersion: r.schema_version,
-      analyticsVersion: r.analytics_version,
-      nodeVersion: r.node_version,
-      sqliteVersion: r.sqlite_version,
-      protocolVersion: r.protocol_version,
-      stopReasons: parseJson<string[]>(r.stop_reasons_json),
-      scanCounts: parseJson<Record<string, unknown>>(r.scan_counts_json),
-      persistCounts: parseJson<Record<string, unknown>>(r.persist_counts_json),
-      budgetLimit: r.budget_limit,
-      budgetUsed: r.budget_used,
-      windowFirst: r.window_first,
-      windowLast: r.window_last,
-      error: parseJson<Record<string, unknown>>(r.error_json),
-      recoveredReason: r.recovered_reason,
-    };
-  });
+  return all(db, "SELECT * FROM collection_run ORDER BY started_at DESC, rowid DESC LIMIT ?", limit).map(toRunRecord);
+}
+
+function toRunRecord(raw: unknown): RunRecord {
+  const r = RunRow.parse(raw);
+  return {
+    runId: r.run_id,
+    sourceType: r.source_type,
+    status: r.status,
+    accounting: r.accounting,
+    startedAt: r.started_at,
+    finishedAt: r.finished_at,
+    ownerPid: r.owner_pid,
+    ownerHost: r.owner_host,
+    heartbeatAt: r.heartbeat_at,
+    heartbeatMs: r.heartbeat_ms,
+    appVersion: r.app_version,
+    buildId: r.build_id,
+    schemaVersion: r.schema_version,
+    analyticsVersion: r.analytics_version,
+    nodeVersion: r.node_version,
+    sqliteVersion: r.sqlite_version,
+    protocolVersion: r.protocol_version,
+    stopReasons: parseJson<string[]>(r.stop_reasons_json),
+    scanCounts: parseJson<Record<string, unknown>>(r.scan_counts_json),
+    persistCounts: parseJson<Record<string, unknown>>(r.persist_counts_json),
+    budgetLimit: r.budget_limit,
+    budgetUsed: r.budget_used,
+    windowFirst: r.window_first,
+    windowLast: r.window_last,
+    error: parseJson<Record<string, unknown>>(r.error_json),
+    recoveredReason: r.recovered_reason,
+  };
 }
 
 const HistoryRow = z.object({
@@ -593,6 +596,8 @@ const HistoryRow = z.object({
   book_state: z.enum(["two-sided", "bid-only", "ask-only", "empty"]).nullable(),
   m_quality: z.enum(["valid", "incomplete", "suspicious", "invalid"]).nullable(),
   pair_skew_ms: z.number().nullable(),
+  computed_at: nullableString,
+  computed_by: z.enum(["collect", "recompute"]).nullable(),
 });
 
 const BookRow = z.object({
@@ -627,7 +632,7 @@ export function readHistory(db: Database, q: HistoryQuery): HistoryPoint[] {
             mo.pairing, mo.association, mo.bucket, mo.reasons_json, mo.question, mo.outcome_labels_json, mo.active, mo.closed,
             mo.accepting_orders, mo.end_date,
             mm.analytics_version, mm.reference_index, mm.best_bid, mm.best_ask, mm.spread, mm.midpoint, mm.top_size, mm.book_state,
-            mm.quality AS m_quality, mm.pair_skew_ms
+            mm.quality AS m_quality, mm.pair_skew_ms, mm.computed_at, mm.computed_by
      FROM market_observation mo
      JOIN collection_run r ON r.run_id = mo.run_id
      LEFT JOIN market_metrics mm ON mm.market_observation_id = mo.id AND mm.analytics_version = ?
@@ -688,6 +693,8 @@ export function readHistory(db: Database, q: HistoryQuery): HistoryPoint[] {
             state: r.book_state,
             quality: r.m_quality!,
             pairSkewMs: r.pair_skew_ms!,
+            computedAt: r.computed_at!,
+            computedBy: r.computed_by!,
           },
   }));
 }
@@ -773,4 +780,182 @@ export function loadEvidence(db: Database, observationId: number): StoredEvidenc
 /** Stored metric columns of one observation for one analytics version (decimal strings as stored). */
 export function readMetricsRow(db: Database, observationId: number, analyticsVersion: number): Record<string, unknown> | undefined {
   return get(db, "SELECT * FROM market_metrics WHERE market_observation_id = ? AND analytics_version = ?", observationId, analyticsVersion);
+}
+
+// ---------------------------------------------------------------- observation detail (read only)
+
+const ObservationRow = z.object({
+  id: z.number(),
+  run_id: z.string(),
+  gamma_id: z.string(),
+  condition_id: z.string(),
+  protocol_version: z.enum(["v1", "v2"]),
+  discovery_position: z.number(),
+  available_at: z.string(),
+  available_at_ms: z.number(),
+  availability_basis: z.enum(["paired_books", "single_book", "association", "discovery"]),
+  persisted_at: z.string(),
+  pairing: z.enum(["paired", "incomplete", "none"]),
+  association: z.enum(["confirmed", "mismatch", "failed", "not_attempted"]),
+  bucket: z.enum(["ranked", "filtered", "excluded", "failed", "notScanned"]),
+  reasons_json: z.string(),
+  warnings_json: z.string(),
+  question: z.string(),
+  slug: z.string(),
+  outcome_labels_json: z.string(),
+  active: flag,
+  closed: flag,
+  accepting_orders: flag.nullable(),
+  enable_order_book: flag.nullable(),
+  neg_risk: flag.nullable(),
+  end_date: nullableString,
+  gamma_volume24hr: nullableString,
+});
+
+const BookMetaRow = z.object({ outcome_index: z.number(), label_observed: z.string(), content_hash: z.string(), quality: BookRow.shape.quality, issues_json: z.string() });
+
+const MetricsRow = z.object({
+  analytics_version: z.number(),
+  computed_at: z.string(),
+  computed_by: z.enum(["collect", "recompute"]),
+  app_version: z.string(),
+  depth_band: nullableString,
+  reference_index: z.number(),
+  reference_asset_id: z.string(),
+  best_bid: nullableString,
+  best_bid_size: nullableString,
+  best_ask: nullableString,
+  best_ask_size: nullableString,
+  spread: nullableString,
+  midpoint: nullableString,
+  top_size: nullableString,
+  top_notional: nullableString,
+  bid_depth: nullableString,
+  ask_depth: nullableString,
+  bid_band_depth: nullableString,
+  ask_band_depth: nullableString,
+  bid_levels: z.number().nullable(),
+  ask_levels: z.number().nullable(),
+  book_state: z.enum(["two-sided", "bid-only", "ask-only", "empty"]).nullable(),
+  quality: BookRow.shape.quality,
+  pair_skew_ms: z.number(),
+});
+
+const RequestRow = z.object({
+  scope: z.string(),
+  source: z.enum(["gamma", "clob"]),
+  endpoint: z.string(),
+  url: z.string(),
+  http_status: z.number().nullable(),
+  attempts: z.number(),
+  started_at: nullableString,
+  received_at: nullableString,
+  error_kind: nullableString,
+});
+
+/** Everything stored for one observation, or null if there is no such observation. */
+export function readObservationDetail(db: Database, observationId: number): ObservationDetail | null {
+  const raw = get(
+    db,
+    `SELECT mo.*, m.condition_id, m.protocol_version FROM market_observation mo JOIN market m ON m.gamma_id = mo.gamma_id WHERE mo.id = ?`,
+    observationId,
+  );
+  if (!raw) return null;
+  const o = ObservationRow.parse(raw);
+  const run = toRunRecord(get(db, "SELECT * FROM collection_run WHERE run_id = ?", o.run_id));
+  const meta = new Map(
+    all(db, "SELECT outcome_index, label_observed, content_hash, quality, issues_json FROM book_observation WHERE market_observation_id = ?", observationId)
+      .map((r) => BookMetaRow.parse(r))
+      .map((r) => [r.outcome_index, r]),
+  );
+  const books = loadEvidence(db, observationId).books.map(({ outcome, book }) => {
+    const m = meta.get(outcome.index)!;
+    const issues = JSON.parse(m.issues_json) as { code: string; severity: string }[];
+    return {
+      outcome,
+      labelObserved: m.label_observed,
+      contentHash: m.content_hash,
+      book,
+      quality: m.quality,
+      issues: issues.map(({ code, severity }) => ({ code, severity })),
+    };
+  });
+  const metrics = all(db, "SELECT * FROM market_metrics WHERE market_observation_id = ? ORDER BY analytics_version", observationId)
+    .map((r) => MetricsRow.parse(r))
+    .map((r) => ({
+      analyticsVersion: r.analytics_version,
+      computedAt: r.computed_at,
+      computedBy: r.computed_by,
+      appVersion: r.app_version,
+      depthBand: r.depth_band,
+      referenceIndex: r.reference_index,
+      referenceAssetId: r.reference_asset_id,
+      bestBid: r.best_bid,
+      bestBidSize: r.best_bid_size,
+      bestAsk: r.best_ask,
+      bestAskSize: r.best_ask_size,
+      spread: r.spread,
+      midpoint: r.midpoint,
+      topSize: r.top_size,
+      topNotional: r.top_notional,
+      bidDepth: r.bid_depth,
+      askDepth: r.ask_depth,
+      bidBandDepth: r.bid_band_depth,
+      askBandDepth: r.ask_band_depth,
+      bidLevels: r.bid_levels,
+      askLevels: r.ask_levels,
+      state: r.book_state,
+      quality: r.quality,
+      pairSkewMs: r.pair_skew_ms,
+    }));
+  // Request scopes are written by the scanner as "market <gamma id> <what>"; the prefix comes from stored data.
+  const requests = all(
+    db,
+    "SELECT scope, source, endpoint, url, http_status, attempts, started_at, received_at, error_kind FROM request_log WHERE run_id = ? AND substr(scope, 1, ?) = ? ORDER BY id",
+    o.run_id,
+    `market ${o.gamma_id} `.length,
+    `market ${o.gamma_id} `,
+  )
+    .map((r) => RequestRow.parse(r))
+    .map((r) => ({
+      scope: r.scope,
+      source: r.source,
+      endpoint: r.endpoint,
+      url: r.url,
+      httpStatus: r.http_status,
+      attempts: r.attempts,
+      startedAt: r.started_at,
+      receivedAt: r.received_at,
+      errorKind: r.error_kind,
+    }));
+  return {
+    observationId: o.id,
+    gammaId: o.gamma_id,
+    conditionId: o.condition_id,
+    protocolVersion: o.protocol_version,
+    discoveryPosition: o.discovery_position,
+    availableAt: o.available_at,
+    availableAtMs: o.available_at_ms,
+    availabilityBasis: o.availability_basis,
+    persistedAt: o.persisted_at,
+    pairing: o.pairing,
+    association: o.association,
+    bucket: o.bucket,
+    reasons: JSON.parse(o.reasons_json) as { code: string; detail: string }[],
+    warnings: JSON.parse(o.warnings_json) as { code: string; detail: string }[],
+    question: o.question,
+    slug: o.slug,
+    outcomeLabels: JSON.parse(o.outcome_labels_json) as string[],
+    active: o.active === 1,
+    closed: o.closed === 1,
+    acceptingOrders: o.accepting_orders === null ? null : o.accepting_orders === 1,
+    enableOrderBook: o.enable_order_book === null ? null : o.enable_order_book === 1,
+    negRisk: o.neg_risk === null ? null : o.neg_risk === 1,
+    endDate: o.end_date,
+    gammaVolume24hr: o.gamma_volume24hr,
+    run,
+    books,
+    metrics,
+    requests,
+  };
 }

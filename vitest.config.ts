@@ -21,6 +21,8 @@ export default defineConfig({
         "src/adapters/storage/**": { lines: 90, statements: 90, functions: 90, branches: 85 },
         "src/app/collectMarkets.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
         "src/app/marketHistory.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
+        // main.ts only runs in spawned processes (covered by test/unit/mcpStdio.test.ts, invisible to V8 coverage).
+        "src/mcp/{contracts,liveBudget,liveTools,results,server,storedTools,views}.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
       },
     },
   },

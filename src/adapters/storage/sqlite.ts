@@ -121,17 +121,26 @@ export function immediate<T>(db: Database, fn: () => T): T {
   }
 }
 
+/** Statement errors (e.g. a corrupt or non-database file, SQLITE_BUSY on a read) surface as typed Storage errors. */
+function statement<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    throw toStorageError(error, "SQLite statement failed");
+  }
+}
+
 export function run(db: Database, sql: string, ...params: SqlValue[]): { changes: number; lastInsertRowid: number } {
-  const r = db.prepare(sql).run(...params);
+  const r = statement(() => db.prepare(sql).run(...params));
   return { changes: Number(r.changes), lastInsertRowid: Number(r.lastInsertRowid) };
 }
 
 export function get(db: Database, sql: string, ...params: SqlValue[]): Record<string, unknown> | undefined {
-  return db.prepare(sql).get(...params);
+  return statement(() => db.prepare(sql).get(...params));
 }
 
 export function all(db: Database, sql: string, ...params: SqlValue[]): Record<string, unknown>[] {
-  return db.prepare(sql).all(...params);
+  return statement(() => db.prepare(sql).all(...params));
 }
 
 export function sqliteVersion(db: Database): string {

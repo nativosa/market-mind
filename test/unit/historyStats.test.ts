@@ -63,6 +63,8 @@ function point(spec: {
             state: spec.state ?? "two-sided",
             quality: "valid",
             pairSkewMs: 0,
+            computedAt: iso(spec.at),
+            computedBy: "collect",
           },
   };
 }

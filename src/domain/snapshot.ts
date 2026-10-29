@@ -1,6 +1,6 @@
 import type { Decimal } from "./decimal.js";
 import type { Market, Outcome, ProtocolVersion } from "./market.js";
-import type { BookQuality, BookState } from "./orderbook.js";
+import type { BookQuality, BookState, OrderBook } from "./orderbook.js";
 import type { DataSource, RequestTiming } from "./provenance.js";
 import type { Bucket, OutcomeObservation, Reason, ScanMetrics, ScanWarning } from "./scan.js";
 
@@ -95,6 +95,9 @@ export interface StoredMetrics {
   state: BookState | null;
   quality: BookQuality;
   pairSkewMs: number;
+  /** When and how this metrics row was written; a recompute may postdate the evidence by far. */
+  computedAt: string;
+  computedBy: "collect" | "recompute";
 }
 
 /** One stored market observation as seen by history queries. */
@@ -147,4 +150,91 @@ export interface RunRecord {
   windowLast: string | null;
   error: Record<string, unknown> | null;
   recoveredReason: string | null;
+}
+
+// ---- Observation detail (read side) ----
+
+/** One captured book of a stored observation, exactly as received. */
+export interface StoredBookDetail {
+  outcome: Outcome;
+  labelObserved: string;
+  contentHash: string;
+  book: OrderBook;
+  quality: BookQuality;
+  issues: { code: string; severity: string }[];
+}
+
+/** A stored metrics row; decimal columns are the exact stored strings. */
+export interface StoredMetricsRow {
+  analyticsVersion: number;
+  computedAt: string;
+  computedBy: "collect" | "recompute";
+  appVersion: string;
+  depthBand: string | null;
+  referenceIndex: number;
+  referenceAssetId: string;
+  bestBid: string | null;
+  bestBidSize: string | null;
+  bestAsk: string | null;
+  bestAskSize: string | null;
+  spread: string | null;
+  midpoint: string | null;
+  topSize: string | null;
+  topNotional: string | null;
+  bidDepth: string | null;
+  askDepth: string | null;
+  bidBandDepth: string | null;
+  askBandDepth: string | null;
+  bidLevels: number | null;
+  askLevels: number | null;
+  state: BookState | null;
+  quality: BookQuality;
+  pairSkewMs: number;
+}
+
+/** A request-log row (one logical request, retries counted in `attempts`). */
+export interface StoredRequest {
+  scope: string;
+  source: DataSource;
+  endpoint: string;
+  url: string;
+  httpStatus: number | null;
+  attempts: number;
+  startedAt: string | null;
+  receivedAt: string | null;
+  errorKind: string | null;
+}
+
+/** Everything stored for one market observation. */
+export interface ObservationDetail {
+  observationId: number;
+  gammaId: string;
+  conditionId: string;
+  protocolVersion: ProtocolVersion;
+  discoveryPosition: number;
+  availableAt: string;
+  availableAtMs: number;
+  availabilityBasis: AvailabilityBasis;
+  persistedAt: string;
+  pairing: Pairing;
+  association: AssociationStatus;
+  bucket: Bucket;
+  reasons: { code: string; detail: string }[];
+  warnings: { code: string; detail: string }[];
+  question: string;
+  slug: string;
+  outcomeLabels: string[];
+  active: boolean;
+  closed: boolean;
+  acceptingOrders: boolean | null;
+  enableOrderBook: boolean | null;
+  negRisk: boolean | null;
+  endDate: string | null;
+  gammaVolume24hr: string | null;
+  run: RunRecord;
+  books: StoredBookDetail[];
+  /** Every analytics version stored for this observation, ascending. */
+  metrics: StoredMetricsRow[];
+  /** Request-log rows scoped to this market in this run (discovery pages are run-wide, not linked). */
+  requests: StoredRequest[];
 }

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "marketmind": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/bin/marketmind-mcp.mjs"]
+    }
+  }
+}

@@ -13,13 +13,16 @@ MarketMind is an educational, open-source TypeScript project that explores Polym
 
 **Stage 2.2** adds local persistence: `collect` stores what a scan observed in a local SQLite database, and `history` / `runs` query it **without any network request**. Polymarket access stays read-only; the only new side effect is writing the local database file.
 
+**Stage 2.3** adds a local, read-only **MCP server** (Model Context Protocol, stdio). It exposes five of these capabilities as typed tools for Claude Code and, later, an investigation agent: live `scan_markets` and `inspect_market`, plus offline `list_collection_runs`, `get_market_history` and `get_observation_details`. The tools call the same application code as the CLI. They never write to the database, never trade, and call no LLM.
+
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
 
 ## Requirements
 
 - Node.js 24.15 or later (`.nvmrc`; `node:sqlite` is a release candidate from 24.15)
 - npm 11+
-- No database server and no extra packages: storage uses the built-in `node:sqlite`
+- No database server: storage uses the built-in `node:sqlite`
+- The MCP server uses the official MCP TypeScript SDK v2 (`@modelcontextprotocol/server`, pinned)
 
 ```bash
 npm ci
@@ -85,6 +88,7 @@ Optional environment overrides, all validated:
 - `MARKETMIND_MAX_RETRIES` (0–5)
 - `MARKETMIND_DB`: database path (`.sqlite`/`.db`; default `data/marketmind.sqlite`)
 - `MARKETMIND_BUILD_ID`: optional build identifier stored with every run, e.g. `MARKETMIND_BUILD_ID=$(git rev-parse HEAD)`. MarketMind never calls Git at runtime.
+- `MARKETMIND_MCP_MAX_REQUESTS`: live HTTP attempts allowed per MCP server process (1–1000, default 200)
 
 ## How it works
 
@@ -295,6 +299,126 @@ Projections at ~7 KiB per snapshot (heavier books cost more):
 | 10 markets every 15 min for 30 days | 28,800 | ~0.2 GiB |
 | 30 markets every 5 min for 30 days | 259,200 | ~1.8 GiB |
 
+## MCP server (Stage 2.3)
+
+A local [Model Context Protocol](https://modelcontextprotocol.io) server that exposes MarketMind's deterministic research to Claude Code and other MCP clients.
+- **Transport:** stdio only. It opens no port, listens on no socket and needs no authentication.
+- **Protocol output:** stdout carries JSON-RPC messages only; diagnostics go to stderr.
+- **Lifetime:** the server exits when the client closes its stdin. It runs no background work.
+
+### Tools
+
+| Tool | Data | Network | Purpose |
+|---|---|---|---|
+| `scan_markets` | live | bounded public GETs | Rank a bounded live sample by quoted spread, with full accounting, partial status, reasons and warnings |
+| `inspect_market` | live | 4 GETs (≤ 8 attempts, 20 s) | One market: outcome identity, validated books, metrics, best levels, timestamps and provenance |
+| `list_collection_runs` | stored | none | Recent collection runs: status, accounting, versions and source type |
+| `get_market_history` | stored | none | Stored observations of one market and sample-count statistics, with `asOf` |
+| `get_observation_details` | stored | none | Full evidence of one stored observation: exact levels, timing, metrics versions and requests |
+
+**Annotations.** Every tool is annotated `readOnlyHint: true`, `destructiveHint: false` and `idempotentHint: true` (a read has no side effects, even if prices change between calls). Only the live tools are `openWorldHint: true`.
+
+**Inputs.** Every input schema is strict (`additionalProperties: false`) and bounded. No input accepts a path, URL, SQL or command.
+- **Database:** taken from configuration (`MARKETMIND_DB` or `data/marketmind.sqlite`), never from tool arguments.
+- **Live limits:** stricter than the CLI's.
+
+| Setting | Default | Maximum |
+|---|---|---|
+| `scan_markets` markets inspected | 5 | 10 |
+| `scan_markets` pages | 1 | 2 |
+| `scan_markets` requests | 16 | 32 |
+| `scan_markets` duration | 30 s | 60 s |
+| `inspect_market` levels | 5 | 20 |
+
+**Outputs.** Every tool declares an output schema, and the SDK validates every result against it.
+- **Contract:** each result carries a versioned contract (`marketmind.<tool>/1`), the app version, `generatedAt`, `source` (`live`/`stored`) and a `status`.
+- **Decimals:** prices and sizes are exact decimal strings, never floats.
+- **Evidence IDs:** results carry stable identifiers to cite: `observationId`, `runId`, `contentHash`, `gammaId`, `conditionId` and `assetId`.
+- **Truncation:** every truncated list reports what was cut (`returnedCount`, `totalCount`/`hasMore`, `truncated`).
+- **Size bound:** a serialized result is at most 32,000 characters. Collections shrink deterministically, and JSON is never cut mid-structure.
+- **What the model sees:** Claude Code (verified with version 2.1.302) passes `structuredContent` to the model and drops the text block. The text block is therefore only a short summary for clients that show text. Error results are the other way round: Claude Code passes their text, so an error's text is the complete error object. Errors carry no `structuredContent`: it would have to match the tool's success schema, which strict clients enforce even on errors.
+
+**Statuses, not errors.** These are successful results:
+- a partial scan;
+- an invalid book (`invalid_book`, with its evidence);
+- a market without stored observations (`no_history`, `evidence: "insufficient"`).
+
+The agent can then say "insufficient evidence".
+
+**Errors.** Errors are `isError: true` results whose text is a JSON object (`marketmind.error/1`) with a category, code, message and a `retryable` flag. They never include stack traces, local paths or environment values.
+
+| Category | Meaning |
+|---|---|
+| `invalid_arguments` | Invalid input (rejected by the schema before any request) |
+| `market_not_found` | The market does not exist upstream |
+| `market_ineligible` | The market cannot be inspected |
+| `observation_not_found` | No stored observation has that ID |
+| `observation_not_available_as_of` | The observation became available after `asOf` |
+| `database_missing` | No local database exists; run `collect` first |
+| `upstream_unavailable` | Network error, timeout or 5xx (retryable) |
+| `rate_limited` | Polymarket returned 429 (retryable) |
+| `upstream_invalid_data` | Malformed upstream data |
+| `budget_exhausted` | The per-call or process request budget is used up |
+| `deadline_exceeded` | The call ran past its deadline |
+| `storage_error` | Local database error |
+
+**As-of and look-ahead.** With `asOf`, the stored tools only use evidence that had become available by then.
+- `get_market_history` filters observations in SQL first and omits each run's final status.
+- `get_observation_details` refuses an observation that was not yet available.
+- `get_observation_details` also withholds later facts: requests completed after `asOf`, the run's final status and persistence time.
+- Metrics rows computed after `asOf` are marked `retrospective: true`.
+
+### Read-only and budget guarantees
+
+- **Network:** live tools make only public `GET` requests to the configured Gamma and CLOB hosts. Stored tools receive no HTTP client at all.
+- **Database:** stored tools open an existing database read-only, after checking it exists. They never create or migrate it and never write rows.
+  - SQLite may still create its coordination files next to the database, as it does for any reader of a WAL database. Measured: an empty `-wal` and a 32 KiB `-shm` shared-memory index. They hold no data, and the next writer (`collect`) removes them when it closes. The database file itself stays byte-identical (tested).
+- **One live call at a time:** concurrent calls wait in a queue. A call cancelled while queued sends nothing.
+- **Process-wide ceiling:** every physical HTTP attempt, retries and failures included, counts against `MARKETMIND_MCP_MAX_REQUESTS` (default 200 per server process).
+  - Before it starts, a call reserves its worst case; unused units return afterwards.
+  - If its reservation does not fit, the call is refused before any request is sent.
+- **No credentials:** no credentials, wallets, private keys, trading endpoints or LLM calls exist anywhere in the code.
+- **Untrusted text:** market questions and labels are third-party data. They are stripped of control and bidi characters, length-capped, and listed in each result's `untrustedTextFields`.
+
+### Setup with Claude Code
+
+1. Clone the repository and run `npm ci`. Claude Code is installed and signed in with **your own** account. The server holds no credentials and calls no model, so using it consumes nobody else's account.
+2. The repository ships a project-scoped [`.mcp.json`](.mcp.json):
+   ```json
+   { "mcpServers": { "marketmind": { "type": "stdio", "command": "node", "args": ["${CLAUDE_PROJECT_DIR:-.}/bin/marketmind-mcp.mjs"] } } }
+   ```
+   - It contains no absolute paths and no secrets.
+   - `node` is a real executable on Windows too, so no `cmd /c` wrapper is needed.
+   - The launcher finds `tsx` from its own location and switches to the repository root, so it works from any working directory.
+3. Run `claude` in the repository and approve the `marketmind` project server when asked.
+   - `claude mcp list` / `claude mcp get marketmind` show its status (`⏸ Pending approval` until then).
+   - `claude mcp reset-project-choices` asks again.
+4. In a session, `/mcp` lists the server and its five tools. A first try: *"List my MarketMind collection runs"*, or *"Inspect Polymarket market 682705"*.
+5. **Optional settings:**
+   - To use another database or request ceiling, set `MARKETMIND_DB` / `MARKETMIND_MCP_MAX_REQUESTS` in your environment.
+   - Alternatively, add a personal local-scope server: `claude mcp add --scope local marketmind-local -e MARKETMIND_DB=/path/to.sqlite -- node /path/to/market-mind/bin/marketmind-mcp.mjs`.
+   - Never commit such paths.
+
+**Without a database**, the live tools work and the stored tools answer `database_missing`. Run `npm run cli -- collect` first to give them evidence.
+
+### Testing manually
+
+```bash
+npm run mcp                                                     # start the server on stdio (Ctrl+C or close stdin to stop)
+npx @modelcontextprotocol/inspector@2.11.0 --cli node bin/marketmind-mcp.mjs --method tools/list --strict
+npx @modelcontextprotocol/inspector@2.11.0 --cli node bin/marketmind-mcp.mjs --method tools/call --tool-name list_collection_runs --tool-arg limit=5
+npx @modelcontextprotocol/inspector@2.11.0 --cli node bin/marketmind-mcp.mjs --method tools/call --tool-name get_market_history --tool-args-json '{"marketId":"682705"}'
+npx @modelcontextprotocol/inspector@2.11.0 --cli -e MARKETMIND_DB=/path/to/other.sqlite node bin/marketmind-mcp.mjs --method tools/call --tool-name list_collection_runs
+```
+
+Notes on the Inspector:
+- **Market IDs:** `--tool-arg` JSON-parses values, so `marketId=682705` would arrive as a number, which the strict schema rejects. Pass string IDs with `--tool-args-json`.
+- **Environment:** the Inspector does not forward your shell environment to the server. Pass settings with `-e`.
+- **Exit codes:** a tool error exits with code 5 (`tool_is_error`). The result is still printed.
+- **`--strict`:** lists all five tools and reports no errors, only portability warnings. Nullable output fields use a JSON Schema type array (`["string", "null"]`), which single-type dialects such as Gemini's function declarations may not accept. Claude Code and the MCP SDK accept it.
+
+The MCP Inspector is a third-party developer tool fetched on demand. It is not a project dependency and requires Node ≥ 22.19. Its web UI (without `--cli`) binds to 127.0.0.1 and protects its API with a random per-launch token.
+
 ## Architecture
 
 ```
@@ -305,14 +429,17 @@ src/
   analytics/  deterministic book metrics and quality classification
   adapters/polymarket/  HTTP client (timeout, bounded retry), Zod schemas, Gamma/CLOB clients, normalization
   adapters/storage/     node:sqlite connection + transactions, migrations, snapshot store, process liveness
-  app/        use cases: listMarkets, inspectMarket, scanMarkets, collectMarkets, marketHistory (+ concurrency helpers)
+  app/        use cases: listMarkets, inspectMarket, scanMarkets, collectMarkets, marketHistory, observationDetails (+ concurrency helpers)
+  mcp/        MCP server (stdio): contracts (Zod schemas), live/stored tools, bounded views, errors, live request gate
+bin/marketmind-mcp.mjs   portable MCP launcher (any working directory, no shell wrapper)
 ```
 
-Dependencies point inward: `cli → app → adapters/analytics/domain`. ESLint enforces two boundaries:
+Dependencies point inward: `cli`/`mcp → app → adapters/analytics/domain`. ESLint enforces these boundaries (each file group has exactly one combined import rule, so no rule silently overrides another):
 
 - `domain` and `analytics` cannot import outer layers or `node:*`, and may not use `parseFloat`/`Number`/`Math`.
 - Only `httpClient.ts` may call `fetch`.
 - Only `adapters/storage/sqlite.ts` may import `node:sqlite`. Storage and the Polymarket adapters never import each other. The scanner talks to storage only through an optional `onSettled` callback that `collect` provides.
+- Only `src/mcp` may import the MCP SDK, and nothing imports `src/mcp`. `src/mcp` may not import the CLI, storage internals (except process liveness), `collectMarkets`, `node:sqlite`, `node:fs`, `node:child_process`, `node:net` or `node:http(s)`.
 
 The HTTP client itself only offers a `GET` method. The scanner adds an optional request budget and abort signal to it; both are additive and unused by `markets`/`inspect`.
 
@@ -327,7 +454,7 @@ npm run verify      # typecheck + lint + coverage
 npm run smoke       # OPT-IN live smoke test against public endpoints
 ```
 
-The live smoke tests run Stage 1 inspection and a 3-market scan separately for v1 and v2. They also run a 3-market v1 `collect` into a **temporary** database (deleted afterwards), followed by offline `history`/`runs` queries. Each run allows at most **12 HTTP requests**, every request counted, including market-detail lookups. Each run reports one of four results:
+The live smoke tests run Stage 1 inspection and a 3-market scan separately for v1 and v2. They also run a 3-market v1 `collect` into a **temporary** database (deleted afterwards), followed by offline `history`/`runs` queries. Finally, they start the real MCP server process and call `scan_markets` and `inspect_market` over stdio, with the server itself capping the process at 12 attempts. Each run allows at most **12 HTTP requests**, every request counted, including market-detail lookups. Each run reports one of four results:
 
 | Result | Meaning |
 |---|---|
@@ -371,6 +498,9 @@ Assumptions:
 - **Wide spreads are often artefacts.** In thin or extreme-price markets (`EXTREME_PRICE`), a wide spread is often tick granularity or untradeable size. Filters and warnings reduce this; they cannot remove it.
 - **Collected history is a sample of samples.** Each collection inspects a volume-ordered sample. Per-market histories therefore have irregular gaps and survivorship bias, and a hard crash loses the markets that were in flight.
 - **`node:sqlite` is a release candidate** in Node 24, so its API may still change. All use is confined to one adapter file.
+- **MCP live results are not persisted.** `scan_markets` and `inspect_market` report what was observed at a given time, but cannot be re-verified later. Durable evidence requires `npm run cli -- collect`.
+- **`observationId` is stable within one database file only.** Cite it together with its `runId`.
+- **The MCP server runs TypeScript through `tsx`** (a devDependency), so it needs a normal `npm ci`, not `--omit=dev`.
 - **Scope.** Polymarket access is read-only and on-demand: there is no streaming, scheduling, monitoring or trading. Repeated collection is your explicit decision; there is no background mode.
 
 ## License
