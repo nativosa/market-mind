@@ -1,12 +1,12 @@
 {
   "name": "market-mind",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Read-only Polymarket API explorer with deterministic order-book analytics (educational project).",
   "license": "MIT",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.15"
   },
   "scripts": {
     "cli": "tsx src/cli/main.ts",

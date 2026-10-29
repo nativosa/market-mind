@@ -15,7 +15,9 @@ export type ErrorKind =
   /** The scan was stopped: deadline, user cancellation or rate-limit circuit. */
   | "Cancelled"
   /** The request budget refused a request's first attempt; nothing was sent. */
-  | "BudgetExceeded";
+  | "BudgetExceeded"
+  /** Local database failure (see `details.code`). */
+  | "Storage";
 
 export interface ErrorDetails {
   url?: string;
@@ -25,6 +27,8 @@ export interface ErrorDetails {
   issues?: string[];
   /** On a real failure (e.g. Upstream5xx): a retry was refused because the request budget was exhausted. */
   budgetExhausted?: boolean;
+  /** Machine-readable sub-code, e.g. Storage "DATABASE_BUSY" or NotFound "DATABASE_MISSING". */
+  code?: string;
 }
 
 export class MarketMindError extends Error {

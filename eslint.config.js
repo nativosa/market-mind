@@ -60,17 +60,60 @@ export default tseslint.config(
       "no-restricted-imports": ["error", { patterns: [{ group: [...outerLayers, "node:*"], message: "analytics may depend on domain only." }] }],
     },
   },
-  // Adapters must not reach up into application or CLI code.
+  // node:sqlite (a release candidate in Node 24) is confined to one adapter file.
   {
-    files: ["src/adapters/**/*.ts"],
+    files: ["src/**/*.ts"],
+    ignores: ["src/adapters/storage/sqlite.ts"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [{ group: ["**/app/**", "**/cli/**"], message: "adapters must not depend on app or cli." }] }],
+      "no-restricted-imports": ["error", { paths: [{ name: "node:sqlite", message: "Only src/adapters/storage/sqlite.ts may import node:sqlite." }] }],
+    },
+  },
+  // Polymarket adapters must not reach up into application or CLI code, nor into storage.
+  {
+    files: ["src/adapters/polymarket/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [{ name: "node:sqlite", message: "Only src/adapters/storage/sqlite.ts may import node:sqlite." }],
+          patterns: [{ group: ["**/app/**", "**/cli/**", "**/storage/**"], message: "polymarket adapters must not depend on app, cli or storage." }],
+        },
+      ],
+    },
+  },
+  // Storage knows nothing about HTTP, the scanner or the CLI.
+  {
+    files: ["src/adapters/storage/**/*.ts"],
+    ignores: ["src/adapters/storage/sqlite.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [{ name: "node:sqlite", message: "Only src/adapters/storage/sqlite.ts may import node:sqlite." }],
+          patterns: [{ group: ["**/app/**", "**/cli/**", "**/polymarket/**"], message: "storage must not depend on app, cli or polymarket adapters." }],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/adapters/storage/sqlite.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [{ group: ["**/app/**", "**/cli/**", "**/polymarket/**"], message: "storage must not depend on app, cli or polymarket adapters." }] },
+      ],
     },
   },
   {
     files: ["src/app/**/*.ts"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [{ group: ["**/cli/**"], message: "app must not depend on cli." }] }],
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [{ name: "node:sqlite", message: "Only src/adapters/storage/sqlite.ts may import node:sqlite." }],
+          patterns: [{ group: ["**/cli/**"], message: "app must not depend on cli." }],
+        },
+      ],
     },
   },
 );

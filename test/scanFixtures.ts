@@ -138,7 +138,7 @@ export function provenance(receivedAt = "2026-10-28T21:05:12.010Z"): Provenance 
 export function observation(
   index: number,
   book: BookSpec,
-  options: { label?: string; receivedAt?: string; id?: string; depthBand?: string | null } = {},
+  options: { label?: string; receivedAt?: string; id?: string; depthBand?: string | null; kind?: "tokenId" | "positionId" } = {},
 ): OutcomeObservation {
   const id = options.id ?? "1";
   const label = options.label ?? (index === 0 ? "Yes" : "No");
@@ -147,8 +147,8 @@ export function observation(
     label,
     role: null,
     assetId: assetId(id, index),
-    assetIdKind: "tokenId",
-    raw: { clobTokenId: assetId(id, index), positionId: null },
+    assetIdKind: options.kind ?? "tokenId",
+    raw: options.kind === "positionId" ? { clobTokenId: null, positionId: assetId(id, index) } : { clobTokenId: assetId(id, index), positionId: null },
   };
   const body = bookBody({ id }, index, book);
   const ob = toOrderBook(

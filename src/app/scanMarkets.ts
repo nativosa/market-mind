@@ -9,8 +9,8 @@ import { computeScanMetrics, evaluateCandidate } from "../analytics/scanMetrics.
 import type { Decimal } from "../domain/decimal.js";
 import { isMarketMindError, MarketMindError, type ErrorKind } from "../domain/errors.js";
 import type { Market, ProtocolVersion } from "../domain/market.js";
-import type { OrderBook } from "../domain/orderbook.js";
 import type { DataSource, RequestTiming } from "../domain/provenance.js";
+import type { AssociationStatus } from "../domain/snapshot.js";
 import {
   scanEligibility,
   type Bucket,
@@ -69,6 +69,18 @@ export interface ScanDeps {
   signal?: AbortSignal;
   /** Deadline signal factory, injectable for tests. Defaults to AbortSignal.timeout. */
   deadline?: (ms: number) => AbortSignal;
+  /**
+   * Optional observer, called synchronously exactly once per selected market as soon as its final
+   * bucket is known (never for unselected markets). It must not throw. Used by `collect` to persist
+   * each market incrementally; the scanner itself knows nothing about storage.
+   */
+  onSettled?: (settled: SettledMarket) => void;
+}
+
+export interface SettledMarket {
+  entry: ScanEntry;
+  /** Requests made for this market plus its discovery page, in scope order. */
+  requests: RequestRecord[];
 }
 
 export interface RequestRecord {
@@ -86,6 +98,10 @@ export interface RequestRecord {
 export interface ScanEntry {
   /** Discovery order, 0-based. */
   position: number;
+  /** Discovery page (1-based) the record came from. */
+  discoveryPage: number;
+  /** Outcome association for inspected markets; not_attempted otherwise. */
+  association: AssociationStatus;
   gammaId: string | null;
   market: Market | null;
   eligible: boolean;
@@ -94,7 +110,7 @@ export interface ScanEntry {
   reasons: Reason[];
   warnings: ScanWarning[];
   explanation: string[];
-  /** Both outcome books when inspected; empty otherwise. */
+  /** Books actually received and assessed: both when inspected, any that arrived when a sibling failed, else none. */
   outcomes: OutcomeObservation[];
   metrics: ScanMetrics | null;
   /** Validation issues or error details for failed entries. */
@@ -275,7 +291,7 @@ export async function scanMarkets(options: ScanOptions, deps: ScanDeps): Promise
   }
 
   // 2-3. Metadata classification and selection, in discovery order.
-  const entries: ScanEntry[] = discovered.map(({ item }, position) => classifyRecord(item, position));
+  const entries: ScanEntry[] = discovered.map(({ item, page }, position) => classifyRecord(item, position, page));
   const selected: ScanEntry[] = [];
   for (const entry of entries) {
     if (!entry.eligible) continue;
@@ -296,11 +312,21 @@ export async function scanMarkets(options: ScanOptions, deps: ScanDeps): Promise
     return reservation;
   });
 
+  const settle = (entry: ScanEntry) => {
+    if (!deps.onSettled) return;
+    const own = records
+      .filter(({ key }) => (key[0] === 1 && key[1] === entry.position) || (key[0] === 0 && key[1] === entry.discoveryPage))
+      .sort((a, b) => compareKeys(a.key, b.key))
+      .map((r) => r.record);
+    deps.onSettled({ entry, requests: own });
+  };
+
   await mapWithConcurrency(selected, options.concurrency, async (entry, i) => {
     const reservation = reservations[i] ?? null;
     if (reservation === null) {
       stopReasons.add("BUDGET_EXHAUSTED");
       notScanned(entry, "BUDGET_EXHAUSTED", `budget of ${options.maxRequests} requests cannot cover this market`);
+      settle(entry);
       return;
     }
     try {
@@ -308,6 +334,7 @@ export async function scanMarkets(options: ScanOptions, deps: ScanDeps): Promise
     } finally {
       reservation.release();
     }
+    settle(entry);
   });
 
   async function inspect(entry: ScanEntry, reservation: Reservation): Promise<void> {
@@ -323,22 +350,34 @@ export async function scanMarkets(options: ScanOptions, deps: ScanDeps): Promise
       const outcomes = selectOutcomes(market);
       const clob = (step: number, what: string) =>
         createClobClient(clientFor(reservation, [1, entry.position, step], `${scope} ${what}`), deps.clobBaseUrl);
+      entry.association = "failed"; // until the association response arrives and matches
       const { info } = await clob(0, "association").getMarketInfo(market.conditionId);
-      associateOutcomes(outcomes, info);
+      try {
+        associateOutcomes(outcomes, info);
+      } catch (error) {
+        entry.association = "mismatch";
+        throw error;
+      }
+      entry.association = "confirmed";
       const settled = await Promise.allSettled(outcomes.map((o, i) => clob(1 + i, `book ${o.label}`).getBook(o.assetId)));
+      // Keep every book that did arrive, even if its sibling failed: it is still evidence.
+      entry.outcomes = settled.flatMap((s, i): OutcomeObservation[] =>
+        s.status === "fulfilled"
+          ? [
+              {
+                outcome: outcomes[i]!,
+                book: s.value,
+                assessment: assessBook(s.value, { depthBand: options.depthBand, expectedConditionId: market.conditionId }),
+              },
+            ]
+          : [],
+      );
       const rejected = settled.filter((s) => s.status === "rejected").map((s) => s.reason as unknown);
       if (rejected.length > 0) {
         // Prefer the root cause over requests the scan cancelled because of it.
         throw rejected.find((e) => !(isMarketMindError(e) && (e.kind === "Cancelled" || e.kind === "BudgetExceeded"))) ?? rejected[0];
       }
-      const observations = outcomes.map((outcome, i) => {
-        const book = (settled[i] as PromiseFulfilledResult<OrderBook>).value;
-        return {
-          outcome,
-          book,
-          assessment: assessBook(book, { depthBand: options.depthBand, expectedConditionId: market.conditionId }),
-        };
-      });
+      const observations = entry.outcomes;
       const [ref, other] = observations as [OutcomeObservation, OutcomeObservation];
       const metrics = computeScanMetrics(ref, other);
       const evaluation = evaluateCandidate(ref, other, metrics, options.filters, market.endDate);
@@ -355,7 +394,9 @@ export async function scanMarkets(options: ScanOptions, deps: ScanDeps): Promise
       if (error.kind === "Cancelled" || error.kind === "BudgetExceeded") {
         const code = error.kind === "BudgetExceeded" ? "BUDGET_EXHAUSTED" : stopCode();
         stopReasons.add(code);
-        notScanned(entry, code, "stopped while this market was being inspected; partial data discarded");
+        // A cancelled association request never answered: it was not attempted to completion.
+        if (entry.association === "failed") entry.association = "not_attempted";
+        notScanned(entry, code, "stopped while this market was being inspected; books received so far are kept, metrics are not computed");
         return;
       }
       if (error.kind === "RateLimited") {
@@ -413,8 +454,18 @@ function assertWithinLimits(o: ScanOptions): void {
   }
 }
 
-function classifyRecord(item: Market | SkippedMarket, position: number): ScanEntry {
-  const base = { position, eligible: false, selected: false, warnings: [], explanation: [], outcomes: [], metrics: null };
+function classifyRecord(item: Market | SkippedMarket, position: number, discoveryPage: number): ScanEntry {
+  const base = {
+    position,
+    discoveryPage,
+    association: "not_attempted" as const,
+    eligible: false,
+    selected: false,
+    warnings: [],
+    explanation: [],
+    outcomes: [],
+    metrics: null,
+  };
   if (!("gammaId" in item)) {
     return {
       ...base,

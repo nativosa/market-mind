@@ -1,5 +1,7 @@
 import type { InspectResult, OutcomeReport } from "../app/inspectMarket.js";
 import type { ListMarketsResult } from "../app/listMarkets.js";
+import type { CollectResult } from "../app/collectMarkets.js";
+import type { HistoryResult, RunsResult } from "../app/marketHistory.js";
 import { countScan, type ScanEntry, type ScanResult } from "../app/scanMarkets.js";
 import { decimalToString, type Decimal } from "../domain/decimal.js";
 import type { MarketMindError } from "../domain/errors.js";
@@ -214,4 +216,93 @@ export function scanJson(result: ScanResult) {
 
 export function errorJson(error: MarketMindError) {
   return { error: { kind: error.kind, message: error.message, ...error.details } };
+}
+
+// ---- Stage 2.2: collect / history / runs ----
+
+export function collectJson(result: CollectResult) {
+  const err = (e: MarketMindError | null) => (e === null ? null : errorJson(e).error);
+  return {
+    run: { runId: result.runId, status: result.status, accounting: result.accounting, finalized: result.finalized, dbPath: result.dbPath },
+    persistence: {
+      counts: result.persist,
+      invariant: "selected = persistedObservations + persistenceFailures + persistenceFailuresUnrecorded",
+      failures: result.failures,
+    },
+    recovery: result.recovery,
+    storage: {
+      footprintBefore: result.footprintBefore,
+      footprintAfter: result.footprintAfter,
+      softLimitBytes: result.maxDbBytes,
+      sizeLimitExceeded: result.sizeLimitExceeded,
+    },
+    errors: { scan: err(result.scanError), storage: err(result.storageError) },
+    scan: result.scan ? scanJson(result.scan) : null,
+  };
+}
+
+export function historyJson(result: HistoryResult) {
+  const s = result.stats;
+  return {
+    query: { ...result.query, threshold: decimalToString(result.query.threshold) },
+    analysisWindow: result.analysisWindow,
+    stats: {
+      eligible: s.eligible,
+      usable: s.usable,
+      notUsable: s.notUsable,
+      firstUsableAt: s.firstUsableAt,
+      lastUsableAt: s.lastUsableAt,
+      spread: {
+        n: s.spread.n,
+        min: dec(s.spread.min),
+        median: dec(s.spread.median),
+        max: dec(s.spread.max),
+        current: dec(s.spread.current),
+        previous: dec(s.spread.previous),
+        change: dec(s.spread.change),
+      },
+      topSize: { n: s.topSize.n, current: dec(s.topSize.current), previous: dec(s.topSize.previous), change: dec(s.topSize.change) },
+      threshold: {
+        n: s.threshold.n,
+        threshold: decimalToString(s.threshold.threshold),
+        atOrAbove: s.threshold.atOrAbove,
+        percentOfSamples: dec(s.threshold.percentOfSamples),
+      },
+      gaps: s.gaps,
+      states: s.states,
+    },
+    rows: result.rows.map(({ point: p, flags }) => ({
+      observationId: p.observationId,
+      runId: p.runId,
+      runStatus: p.runStatus,
+      sourceType: p.sourceType,
+      availableAt: p.availableAt,
+      availabilityBasis: p.availabilityBasis,
+      pairing: p.pairing,
+      association: p.association,
+      bucket: p.bucket,
+      reasonCodes: p.reasonCodes,
+      question: p.question,
+      outcomeLabels: p.outcomeLabels,
+      books: p.books,
+      metrics: p.metrics && {
+        analyticsVersion: p.metrics.analyticsVersion,
+        referenceIndex: p.metrics.referenceIndex,
+        bestBid: dec(p.metrics.bestBid),
+        bestAsk: dec(p.metrics.bestAsk),
+        spread: dec(p.metrics.spread),
+        midpoint: dec(p.metrics.midpoint),
+        topSize: dec(p.metrics.topSize),
+        state: p.metrics.state,
+        quality: p.metrics.quality,
+        pairSkewMs: p.metrics.pairSkewMs,
+      },
+      flags,
+    })),
+    limitations: result.limitations,
+  };
+}
+
+export function runsJson(result: RunsResult) {
+  return result;
 }

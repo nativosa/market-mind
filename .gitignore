@@ -10,6 +10,15 @@ coverage/
 .vitest/
 .cache/
 
+# Local MarketMind databases (Stage 2.2) and SQLite WAL artifacts
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+
 # Logs
 *.log
 npm-debug.log*

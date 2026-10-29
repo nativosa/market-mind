@@ -3,15 +3,19 @@ import { createGammaClient } from "../adapters/polymarket/gammaClient.js";
 import { createHttpClient, type HttpDeps } from "../adapters/polymarket/httpClient.js";
 import { hasInvalidBook, inspectMarket } from "../app/inspectMarket.js";
 import { listMarkets } from "../app/listMarkets.js";
-import { scanMarkets } from "../app/scanMarkets.js";
-import { loadConfig } from "../config/config.js";
+import { randomUUID } from "node:crypto";
+import { realLiveness, type Liveness } from "../adapters/storage/processLiveness.js";
+import { collectMarkets } from "../app/collectMarkets.js";
+import { collectionRuns, marketHistory } from "../app/marketHistory.js";
+import { scanMarkets, type ScanOptions } from "../app/scanMarkets.js";
+import { DEFAULT_DB_PATH, loadConfig } from "../config/config.js";
 import { decimal } from "../domain/decimal.js";
 import { isMarketMindError, MarketMindError, type ErrorKind } from "../domain/errors.js";
-import { parseCli, USAGE } from "./args.js";
-import { formatError, formatInspect, formatMarkets, formatScan } from "./format.js";
-import { errorJson, inspectJson, marketsJson, scanJson } from "./jsonView.js";
+import { parseCli, USAGE, type ScanCommand } from "./args.js";
+import { formatCollect, formatError, formatHistory, formatInspect, formatMarkets, formatRuns, formatScan } from "./format.js";
+import { collectJson, errorJson, historyJson, inspectJson, marketsJson, runsJson, scanJson } from "./jsonView.js";
 
-export const EXIT = { ok: 0, unexpected: 1, usage: 2, notFound: 3, upstream: 4, invalidData: 5, partial: 6 } as const;
+export const EXIT = { ok: 0, unexpected: 1, usage: 2, notFound: 3, upstream: 4, invalidData: 5, partial: 6, storage: 7 } as const;
 
 export function exitCodeFor(kind: ErrorKind): number {
   switch (kind) {
@@ -33,6 +37,8 @@ export function exitCodeFor(kind: ErrorKind): number {
     case "Cancelled":
     case "BudgetExceeded":
       return EXIT.partial;
+    case "Storage":
+      return EXIT.storage;
   }
 }
 
@@ -45,6 +51,26 @@ export interface CliDeps {
   signal?: AbortSignal;
   /** Scan deadline signal factory, injectable for tests. */
   deadline?: (ms: number) => AbortSignal;
+  /** Process liveness checks for safe run recovery (injectable for tests). */
+  liveness?: Liveness;
+  pid?: number;
+  newRunId?: () => string;
+}
+
+function scanOptionsOf(c: Omit<ScanCommand, "kind" | "json">): ScanOptions {
+  return {
+    version: c.version,
+    discoverOrder: c.discoverOrder,
+    maxMarkets: c.maxMarkets,
+    top: c.top,
+    pageSize: c.pageSize,
+    maxPages: c.maxPages,
+    filters: { minSpread: decimal(c.minSpread), minTopSize: decimal(c.minTopSize), includeSuspicious: c.includeSuspicious },
+    depthBand: c.depthBand === null ? null : decimal(c.depthBand),
+    maxRequests: c.maxRequests,
+    concurrency: c.concurrency,
+    maxDurationMs: c.maxDurationMs,
+  };
 }
 
 /** Run one CLI invocation and return its exit code. Never calls process.exit. */
@@ -58,6 +84,69 @@ export async function run(argv: readonly string[], deps: CliDeps): Promise<numbe
     }
     json = command.json;
     const config = loadConfig(deps.env);
+    const liveness = deps.liveness ?? realLiveness;
+
+    // Offline commands: no HTTP client is ever constructed.
+    if (command.kind === "history") {
+      const result = marketHistory({
+        dbPath: command.db ?? config.dbPath,
+        gammaId: command.marketId,
+        asOf: command.asOf,
+        limit: command.limit,
+        threshold: decimal(command.spreadThreshold),
+        analyticsVersion: command.analyticsVersion,
+        includeSynthetic: command.includeSynthetic,
+      });
+      deps.stdout(json ? JSON.stringify(historyJson(result), null, 2) : formatHistory(result));
+      return EXIT.ok;
+    }
+    if (command.kind === "runs") {
+      const result = collectionRuns({ dbPath: command.db ?? config.dbPath, limit: command.limit, liveness, now: deps.http.now });
+      deps.stdout(json ? JSON.stringify(runsJson(result), null, 2) : formatRuns(result));
+      return EXIT.ok;
+    }
+
+    if (command.kind === "collect") {
+      const dbPath = command.db ?? config.dbPath;
+      const result = await collectMarkets(
+        {
+          scan: scanOptionsOf(command),
+          dbPath,
+          createParentDir: dbPath === DEFAULT_DB_PATH,
+          maxDbBytes: command.maxDbMb * 1024 * 1024,
+          buildId: config.buildId,
+          sourceType: "live",
+        },
+        {
+          http: deps.http,
+          httpOptions: config,
+          gammaBaseUrl: config.gammaBaseUrl,
+          clobBaseUrl: config.clobBaseUrl,
+          ...(deps.signal ? { signal: deps.signal } : {}),
+          ...(deps.deadline ? { deadline: deps.deadline } : {}),
+          liveness,
+          now: deps.http.now,
+          pid: deps.pid ?? process.pid,
+          nodeVersion: process.version,
+          newRunId: deps.newRunId ?? randomUUID,
+        },
+      );
+      deps.stdout(json ? JSON.stringify(collectJson(result), null, 2) : formatCollect(result));
+      if (result.scanError) {
+        deps.stderr(formatError(result.scanError));
+        return exitCodeFor(result.scanError.kind);
+      }
+      if (result.storageError) {
+        deps.stderr(formatError(result.storageError));
+        return EXIT.storage;
+      }
+      if (result.status !== "complete") {
+        deps.stderr(`collection ${result.status} (run ${result.runId}, exit ${EXIT.partial})`);
+        return EXIT.partial;
+      }
+      return EXIT.ok;
+    }
+
     const http = createHttpClient(config, deps.http);
     const gamma = createGammaClient(http, config.gammaBaseUrl);
 
@@ -70,23 +159,7 @@ export async function run(argv: readonly string[], deps: CliDeps): Promise<numbe
 
     if (command.kind === "scan") {
       const result = await scanMarkets(
-        {
-          version: command.version,
-          discoverOrder: command.discoverOrder,
-          maxMarkets: command.maxMarkets,
-          top: command.top,
-          pageSize: command.pageSize,
-          maxPages: command.maxPages,
-          filters: {
-            minSpread: decimal(command.minSpread),
-            minTopSize: decimal(command.minTopSize),
-            includeSuspicious: command.includeSuspicious,
-          },
-          depthBand: command.depthBand === null ? null : decimal(command.depthBand),
-          maxRequests: command.maxRequests,
-          concurrency: command.concurrency,
-          maxDurationMs: command.maxDurationMs,
-        },
+        scanOptionsOf(command),
         {
           http: deps.http,
           httpOptions: config,

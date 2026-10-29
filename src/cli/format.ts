@@ -1,5 +1,7 @@
 import type { InspectResult } from "../app/inspectMarket.js";
 import type { ListMarketsResult } from "../app/listMarkets.js";
+import type { CollectResult } from "../app/collectMarkets.js";
+import type { HistoryResult, RunsResult } from "../app/marketHistory.js";
 import { countScan, type ScanEntry, type ScanResult } from "../app/scanMarkets.js";
 import { decimalToString, type Decimal } from "../domain/decimal.js";
 import type { MarketMindError } from "../domain/errors.js";
@@ -245,4 +247,147 @@ export function formatError(error: MarketMindError): string {
   if (d.attempts !== undefined) lines.push(`  attempts: ${d.attempts}`);
   for (const issue of (d.issues ?? []).slice(0, 20)) lines.push(`  - ${issue}`);
   return lines.join("\n");
+}
+
+// ---- Stage 2.2: collect / history / runs ----
+
+export function bytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
+export function duration(ms: number | null): string {
+  if (ms === null) return NONE;
+  if (ms < 1000) return `${ms} ms`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  const h = Math.floor(m / 60);
+  return h < 48 ? `${h}h ${m % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
+}
+
+const footprint = (f: { main: number; wal: number; shm: number; total: number }) =>
+  `${bytes(f.total)} (main ${bytes(f.main)}, wal ${bytes(f.wal)}, shm ${bytes(f.shm)})`;
+
+export function formatCollect(result: CollectResult): string {
+  const out: string[] = [];
+  if (result.scan) out.push(formatScan(result.scan), "");
+  const p = result.persist;
+  const n = (v: number | null) => (v === null ? "unknown" : String(v));
+  out.push(
+    `Persistence  run ${result.runId}  status=${result.status.toUpperCase()}  accounting=${result.accounting}`,
+    `Database: ${result.dbPath}  ${footprint(result.footprintAfter)}; soft admission limit ${bytes(result.maxDbBytes)}`,
+    `Accounting: selected ${n(p.selected)} = persisted ${p.persistedObservations} + failures ${p.persistenceFailures}` +
+      (p.persistenceFailuresUnrecorded > 0 ? ` + unrecorded failures ${p.persistenceFailuresUnrecorded}` : "") +
+      `; not selected ${n(p.notSelected)} of ${n(p.discovered)} discovered (counts only, not stored)`,
+    `Books written ${p.booksWritten} (new contents ${p.bookContentsNew}, deduplicated ${p.bookContentsReused}); metrics rows ${p.metricsWritten}`,
+  );
+  const rec = result.recovery;
+  if (rec.recovered.length > 0 || rec.unverified.length > 0) {
+    out.push(
+      `Recovery: ${rec.recovered.length} abandoned run(s) marked interrupted` +
+        (rec.recovered.length > 0 ? ` (${rec.recovered.join(", ")})` : "") +
+        (rec.unverified.length > 0 ? `; left running (owner not provably gone): ${rec.unverified.map((u) => `${u.runId} ${u.reason}`).join(", ")}` : ""),
+    );
+  }
+  if (result.failures.length > 0) {
+    out.push(`Persistence failures (${result.failures.length})`);
+    for (const f of result.failures.slice(0, 25)) {
+      out.push(`  ${f.gammaId ?? "(no id)"}  ${f.code}${f.recorded ? "" : " (not recorded in database)"}  ${truncate(f.message, 120)}`);
+    }
+  }
+  if (!result.finalized) out.push("Run not finalized: it stays 'running' until a later collect proves this process is gone.");
+  if (result.sizeLimitExceeded) out.push(`Warning: DB_SIZE_LIMIT_EXCEEDED: database is now at or above the soft limit; the next collect will be refused.`);
+  return out.join("\n");
+}
+
+export function formatHistory(result: HistoryResult): string {
+  const { query: q, stats: s, analysisWindow: w } = result;
+  const latest = result.rows[0]?.point;
+  const reasons = Object.entries(s.notUsable)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `${k} ${v}`)
+    .join(", ");
+  const out = [
+    `History  market ${q.gammaId}${latest ? `  "${truncate(latest.question, 70)}"` : ""}`,
+    `Source ${q.includeSynthetic ? "live+synthetic" : "live"}  analytics v${q.analyticsVersion}  as-of ${q.asOf ?? "(latest)"} (by evidence availability)`,
+    `Analysis window: ${w.observations} observation(s), ${w.oldestAvailableAt} .. ${w.newestAvailableAt}` +
+      (w.truncated ? `; TRUNCATED to the most recent ${w.maxObservations}` : ""),
+    `Samples: eligible ${s.eligible}, usable ${s.usable}${reasons ? ` (not usable: ${reasons})` : ""}`,
+    "",
+    `Spread (n=${s.spread.n}): current ${dec(s.spread.current)}, previous ${dec(s.spread.previous)}, change ${dec(s.spread.change)}; ` +
+      `min ${dec(s.spread.min)}, median ${dec(s.spread.median)}, max ${dec(s.spread.max)}`,
+    `Top-of-book size (n=${s.topSize.n}): current ${dec(s.topSize.current)}, previous ${dec(s.topSize.previous)}, change ${dec(s.topSize.change)} shares`,
+    `Spread >= ${dec(s.threshold.threshold)} observed in ${s.threshold.atOrAbove} of ${s.threshold.n} samples` +
+      (s.threshold.percentOfSamples ? ` (${dec(s.threshold.percentOfSamples)}% of samples, not of time)` : ""),
+    `Gaps between usable samples (n=${s.gaps.n}): min ${duration(s.gaps.minMs)}, median ${duration(s.gaps.medianMs)}, max ${duration(s.gaps.maxMs)}; ` +
+      `irregular (>2x median) ${s.gaps.irregular}`,
+    `Distinct book states (n=${s.states.n}): ${s.states.distinct}`,
+    "",
+    `Observations (newest first, showing ${result.rows.length} of ${w.observations})`,
+    table(
+      ["AVAILABLE AT", "RUN", "PAIRING", "BUCKET", "REF", "BID", "ASK", "SPREAD", "TOP SIZE", "QUALITY", "SAME", "GAP", "NOTES"],
+      result.rows.map(({ point: p, flags }) => [
+        p.availableAt,
+        `${p.runId.slice(0, 8)}${p.runStatus === "complete" ? "" : `(${p.runStatus})`}`,
+        p.pairing,
+        p.bucket,
+        p.metrics ? truncate(p.outcomeLabels[p.metrics.referenceIndex] ?? NONE, 14) : NONE,
+        dec(p.metrics?.bestBid),
+        dec(p.metrics?.bestAsk),
+        dec(p.metrics?.spread),
+        dec(p.metrics?.topSize),
+        p.metrics?.quality ?? (p.books.map((b) => b.quality).join("/") || NONE),
+        flags.unchanged === null ? NONE : flags.unchanged ? "yes" : "no",
+        duration(flags.gapMs),
+        [...(flags.notUsable ? [flags.notUsable] : []), ...flags.changes, ...(p.sourceType === "synthetic" ? ["SYNTHETIC"] : []), ...p.reasonCodes].join(",") ||
+          NONE,
+      ]),
+    ),
+    "",
+    "Limitations",
+    ...result.limitations.map((l) => `  - ${l}`),
+  ];
+  return out.join("\n");
+}
+
+export function formatRuns(result: RunsResult): string {
+  const out = [
+    `Collection runs in ${result.dbPath} (schema v${result.schemaVersion}; ${footprint(result.footprint)})`,
+    "",
+  ];
+  if (result.runs.length === 0) {
+    out.push("(no runs)");
+    return out.join("\n");
+  }
+  const count = (r: (typeof result.runs)[number], k: string) => {
+    const v = r.persistCounts?.[k];
+    return typeof v === "number" ? String(v) : "?";
+  };
+  out.push(
+    table(
+      ["STARTED", "RUN", "STATUS", "ACCOUNTING", "VER", "SELECTED", "PERSISTED", "FAILED", "BOOKS", "REQUESTS", "NOTE"],
+      result.runs.map((r) => [
+        r.startedAt,
+        r.runId.slice(0, 8),
+        r.status === "running" ? `running?` : r.status,
+        r.accounting,
+        r.protocolVersion,
+        count(r, "selected"),
+        count(r, "persistedObservations"),
+        count(r, "persistenceFailures"),
+        count(r, "booksWritten"),
+        r.budgetUsed === null ? `?/${r.budgetLimit}` : `${r.budgetUsed}/${r.budgetLimit}`,
+        r.status === "running"
+          ? `owner pid ${r.ownerPid} on ${r.ownerHost}: ${r.owner}; heartbeat ${r.heartbeatAt}`
+          : [r.recoveredReason, ...(r.stopReasons ?? []), r.sourceType === "synthetic" ? "SYNTHETIC" : null].filter(Boolean).join(",") || NONE,
+      ]),
+    ),
+  );
+  if (result.runs.some((r) => r.accounting === "incomplete")) {
+    out.push("", "accounting=incomplete: recovered or inconsistent run; only stored rows are counted, scan totals are unknown (?).");
+  }
+  return out.join("\n");
 }
