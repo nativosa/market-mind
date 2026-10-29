@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__marketmind__scan_markets",
+      "mcp__marketmind__inspect_market",
+      "mcp__marketmind__list_collection_runs",
+      "mcp__marketmind__get_market_history",
+      "mcp__marketmind__get_observation_details"
+    ]
+  }
+}

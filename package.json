@@ -1,6 +1,6 @@
 {
   "name": "market-mind",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Read-only Polymarket API explorer with deterministic order-book analytics (educational project).",
   "license": "MIT",
   "private": true,

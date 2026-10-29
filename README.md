@@ -15,6 +15,8 @@ MarketMind is an educational, open-source TypeScript project that explores Polym
 
 **Stage 2.3** adds a local, read-only **MCP server** (Model Context Protocol, stdio). It exposes five of these capabilities as typed tools for Claude Code and, later, an investigation agent: live `scan_markets` and `inspect_market`, plus offline `list_collection_runs`, `get_market_history` and `get_observation_details`. The tools call the same application code as the CLI. They never write to the database, never trade, and call no LLM.
 
+**Stage 2.4** adds the first agentic layer: a manually invoked Claude Code **Skill**, `/investigate-market`, that forks a restricted **Subagent**, `market-investigator`. The subagent decides which of the five MCP tools it needs and returns an evidence-grounded Markdown research report with a research classification. It can use only those five tools.
+
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
 
 ## Requirements
@@ -419,6 +421,75 @@ Notes on the Inspector:
 
 The MCP Inspector is a third-party developer tool fetched on demand. It is not a project dependency and requires Node ≥ 22.19. Its web UI (without `--cli`) binds to 127.0.0.1 and protects its API with a random per-launch token.
 
+## Investigation agent (Stage 2.4)
+
+An educational AI investigator built only from Claude Code project files. There is no new runtime code, and the MCP server is unchanged.
+
+| File | Role |
+|---|---|
+| [`.claude/skills/investigate-market/SKILL.md`](.claude/skills/investigate-market/SKILL.md) | `/investigate-market`: argument grammar and objective. Runs `context: fork` in the `market-investigator` subagent and waits for it (`background: false`). `disable-model-invocation: true`, so it runs only when you type it |
+| [`.claude/agents/market-investigator.md`](.claude/agents/market-investigator.md) | The subagent: procedure, budgets, evidence rules, classification and report format |
+| [`.claude/settings.json`](.claude/settings.json) | Project allow rules for exactly the five MarketMind tools (nothing else) |
+
+### Usage
+
+```text
+/investigate-market <gammaId> [objective...]        # Mode A: one market
+/investigate-market discover [v1|v2] [objective...] # Mode B: one scan, one candidate chosen by a fixed rule
+```
+
+Example: `/investigate-market 682705 Is the quoted spread supported by stored history?`
+
+Setup is the same as for the MCP server (`npm ci`, then approve the `marketmind` project server). History needs a local database (`npm run cli -- collect`). Without one, the report says history is unknown. The subagent runs on Sonnet with your own Claude Code account. In our tests one investigation cost about $0.05–0.07 of estimated usage.
+
+### The subagent's restrictions
+
+- **Tools:** an explicit allowlist of `mcp__marketmind__scan_markets`, `inspect_market`, `list_collection_runs`, `get_market_history` and `get_observation_details`. It has no Bash/PowerShell, Read/Write/Edit, web, Skill, Agent (it cannot spawn agents), ToolSearch or other MCP servers. A static test checks that the list matches the tools the server really registers.
+- **Permission mode:** `dontAsk`. Calls that are not pre-approved are denied instead of prompting; the project allow rules pre-approve the five tools. Claude Code ignores a subagent's `permissionMode` when the main session runs in `auto`, `acceptEdits` or `bypassPermissions`, and keeps a subagent in plan mode under `plan`. The tool allowlist applies in every mode, so it is the primary control. This follows the Claude Code documentation. Elevated parent modes (`bypassPermissions`, `auto`, `acceptEdits`) were **not** verified locally in Stage 2.4, because a safe test needs an isolated, disposable environment.
+- **Isolation:** no `memory` (nothing persists between investigations) and `omitClaudeMd: true` (no personal or project CLAUDE.md). It does not see the main conversation.
+- **Budgets:** at most 7 MarketMind calls (Mode A) or 8 (Mode B). Mode B makes exactly one scan and never rescans. Live requests are at most 32. `maxTurns: 15` is the hard stop.
+- **Untrusted text:** market questions and labels are quoted as data and never followed. Instruction-like text is reported as a finding.
+- **Synthetic history:** `includeSynthetic` stays false unless the objective explicitly identifies a controlled synthetic scenario and authorizes synthetic history. Such history is labelled SYNTHETIC.
+
+### Report and classification
+
+The report always has these ten sections:
+1. market identification
+2. objective
+3. current book
+4. history
+5. data quality and limitations
+6. key findings
+7. research classification
+8. evidence references
+9. unanswered questions
+10. tool usage
+
+Every finding is tagged `[FACT E#]`, `[CALC E#]`, `[INTERPRETATION]` or `[UNKNOWN]`. Evidence rows cite tool, arguments, `generatedAt` and status. Stored evidence is cited as `obs <observationId> / run <runId> (local DB only)`.
+
+The classification combines two separate assessments: the **current signal** (unavailable / weak or misleading / reasonable) and the **historical evidence** (insufficient / supportive / mixed).
+
+| Current signal | History | Classification |
+|---|---|---|
+| unavailable (invalid, empty or one-sided book, failed inspection) | any | `INSUFFICIENT_EVIDENCE` |
+| weak or misleading (thin quotes, ≤ 1 tick, extreme price, crossed/locked/suspicious, ineligible) | any | `WEAK_OR_MISLEADING_SIGNAL` |
+| reasonable | insufficient or mixed | `INSUFFICIENT_EVIDENCE` |
+| reasonable | supportive | `INTERESTING_FOR_FURTHER_RESEARCH` |
+
+These are research labels, not trading recommendations, and they are separate from the scanner's deterministic rank. The thresholds are provisional research heuristics, not validated metrics:
+- thin means best size below 10 × `minOrderSize`;
+- a reasonable spread is at least 2 ticks;
+- supportive history needs at least 3 usable samples with at least 2 distinct states.
+
+Supportive history means consistent across the recorded samples. Persistence between observations is unknown, and no number of snapshots proves it. A deviation from history is a possible anomaly. It is not automatically misleading or profitable. An old upstream book timestamp is a limitation, not proof of staleness.
+
+### Testing
+
+- **Deterministic (CI, no model):**
+  - `test/unit/agentConfig.test.ts` pins the frontmatter, the exact tool allowlist (against the live server registration), the settings, the absence of memory and shell injection, and the report contract.
+  - `test/unit/agentFixtures.test.ts` checks the synthetic scenario universe and the trace summarizer, and shows synthetic history excluded by default and included only on request.
+- **Real agent (manual, uses model quota):** [`test-agent/README.md`](test-agent/README.md). `npx tsx test-agent/run.ts <scenario>` runs Claude Code headless against a fixture copy of the real server, with simulated `*.example` hosts and a temp synthetic database. It records the stream-json trace and checks delegation, tool attribution, and that the database and repository are unchanged.
+
 ## Architecture
 
 ```
@@ -452,6 +523,7 @@ npm test            # offline Vitest suite; real fetch is disabled
 npm run coverage    # v8 coverage with thresholds (90% core modules, 75% global)
 npm run verify      # typecheck + lint + coverage
 npm run smoke       # OPT-IN live smoke test against public endpoints
+npx tsx test-agent/run.ts <scenario>   # OPT-IN real-agent scenario (uses Claude Code model quota)
 ```
 
 The live smoke tests run Stage 1 inspection and a 3-market scan separately for v1 and v2. They also run a 3-market v1 `collect` into a **temporary** database (deleted afterwards), followed by offline `history`/`runs` queries. Finally, they start the real MCP server process and call `scan_markets` and `inspect_market` over stdio, with the server itself capping the process at 12 attempts. Each run allows at most **12 HTTP requests**, every request counted, including market-detail lookups. Each run reports one of four results:

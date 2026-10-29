@@ -19,6 +19,9 @@ data/
 *.db-wal
 *.db-shm
 
+# Personal Claude Code settings (project settings live in .claude/settings.json)
+.claude/settings.local.json
+
 # Logs
 *.log
 npm-debug.log*

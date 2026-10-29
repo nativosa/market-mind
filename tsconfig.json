@@ -18,5 +18,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "test-live", "vitest.config.ts", "vitest.live.config.ts"]
+  "include": ["src", "test", "test-live", "test-agent", "vitest.config.ts", "vitest.live.config.ts"]
 }
