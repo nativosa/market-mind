@@ -17,6 +17,13 @@ MarketMind is an educational, open-source TypeScript project that explores Polym
 
 **Stage 2.4** adds the first agentic layer: a manually invoked Claude Code **Skill**, `/investigate-market`, that forks a restricted **Subagent**, `market-investigator`. The subagent decides which of the five MCP tools it needs and returns an evidence-grounded Markdown research report with a research classification. It can use only those five tools.
 
+**Stage 2.5** adds an **agent evaluation framework** for that investigator. It has three parts:
+- 12 versioned synthetic golden scenarios;
+- strict trace parsing and deterministic graders, which need no LLM;
+- human-review rubrics, versioned result contracts and a scorecard with explicit denominators.
+
+It also includes a bounded runner for repeated real investigations. The offline layer runs in `npm test`; real runs are opt-in.
+
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
 
 ## Requirements
@@ -488,7 +495,41 @@ Supportive history means consistent across the recorded samples. Persistence bet
 - **Deterministic (CI, no model):**
   - `test/unit/agentConfig.test.ts` pins the frontmatter, the exact tool allowlist (against the live server registration), the settings, the absence of memory and shell injection, and the report contract.
   - `test/unit/agentFixtures.test.ts` checks the synthetic scenario universe and the trace summarizer, and shows synthetic history excluded by default and included only on request.
-- **Real agent (manual, uses model quota):** [`test-agent/README.md`](test-agent/README.md). `npx tsx test-agent/run.ts <scenario>` runs Claude Code headless against a fixture copy of the real server, with simulated `*.example` hosts and a temp synthetic database. It records the stream-json trace and checks delegation, tool attribution, and that the database and repository are unchanged.
+- **Real agent (manual, uses model quota):** see the Stage 2.5 evaluation framework below.
+
+## Agent evaluation (Stage 2.5)
+
+A small, reproducible evaluation of the unchanged v0.5.0 investigator. The full runbook is [`test-agent/README.md`](test-agent/README.md); the recorded baseline is summarized in [`docs/evaluation-baseline-v0.5.0.md`](docs/evaluation-baseline-v0.5.0.md).
+
+- **Fixtures:** revision `agent-fixtures/2`.
+  - Fictional markets 900100–900109 served from simulated `*.example` hosts, read on a fixed clock (`EVAL_NOW` 2026-10-29T12:00:00Z).
+  - Finalized synthetic collection runs on an explicit timeline, including a real 9-day gap.
+  - Varied upstream book timestamps that always precede their receipt.
+  - Unit tests check the chronology, reproducibility and digest.
+- **Golden scenarios S01–S12**, plus a permission probe:
+  - thin wide spread; no history; consistent history; one-sided book; crossed book;
+  - contradictory spreads; irregular gaps; identical samples;
+  - discovery with a flagged rank 1; prompt injection; missing database; synthetic history not authorized.
+  - Expectations live only in `test-agent/eval/scenarios.ts`. Prompts are tested for leakage.
+- **Layer A, deterministic** (no LLM):
+  - gates: artifacts, fixture digest, trace integrity, environment;
+  - safety: delegation, main-session calls, allowlist, fixture database and temp-project integrity, synthetic authorization;
+  - integrity: repository drift, reported separately. It counts as environment interference only with a documented attribution, and never as a proven agent violation by itself;
+  - quality: tool selection, budgets, fixture replay, sections, label, evidence references, fact **coverage** versus **precise value-to-claim** checks, missing-data handling;
+  - review triggers: prohibited phrasing and ungrounded values. Citations and phrases are classed as affirmative, ambiguous, or quoted/described; only affirmative citations enter the validity denominator.
+  - Anything the text heuristics cannot tie to a claim is `NEEDS_REVIEW`, never `PASS`.
+- **Layer B, human review:** rubrics R1–R7. A run's overall `PASS` requires a completed independent human review.
+- **Results:** `marketmind.eval.result/2` per run (grader revision `eval-graders/2`), byte-identical when the recorded inputs are identical. The scorecard (`scorecard.json`/`.md`) has:
+  - proven safety violations, listed individually, kept apart from integrity drift;
+  - accounting for every launched run;
+  - metrics as numerator/denominator with exclusions (0/0 is n/a), for all runs and for clean runs only;
+  - repeated-run consistency, usage and latency, and confounders.
+
+```bash
+npm test                                              # offline layer (no Claude, no key, no network)
+npx tsx test-agent/run.ts --all                       # opt-in: 12 real investigations (bounded budget)
+npx tsx test-agent/eval/evaluate.ts <outDir>          # re-grade recorded runs offline
+```
 
 ## Architecture
 
@@ -523,7 +564,7 @@ npm test            # offline Vitest suite; real fetch is disabled
 npm run coverage    # v8 coverage with thresholds (90% core modules, 75% global)
 npm run verify      # typecheck + lint + coverage
 npm run smoke       # OPT-IN live smoke test against public endpoints
-npx tsx test-agent/run.ts <scenario>   # OPT-IN real-agent scenario (uses Claude Code model quota)
+npx tsx test-agent/run.ts --all        # OPT-IN real-agent evaluation (uses Claude Code model quota)
 ```
 
 The live smoke tests run Stage 1 inspection and a 3-market scan separately for v1 and v2. They also run a 3-market v1 `collect` into a **temporary** database (deleted afterwards), followed by offline `history`/`runs` queries. Finally, they start the real MCP server process and call `scan_markets` and `inspect_market` over stdio, with the server itself capping the process at 12 attempts. Each run allows at most **12 HTTP requests**, every request counted, including market-detail lookups. Each run reports one of four results:

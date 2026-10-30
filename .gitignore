@@ -22,6 +22,9 @@ data/
 # Personal Claude Code settings (project settings live in .claude/settings.json)
 .claude/settings.local.json
 
+# Agent evaluation artifacts (raw traces contain local paths and session ids; never commit)
+.eval-out/
+
 # Logs
 *.log
 npm-debug.log*
