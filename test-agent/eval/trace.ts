@@ -35,9 +35,52 @@ export interface ToolCall {
   name: string;
   input: Record<string, unknown>;
   result: { status: "ok" | "error" | "missing"; text: string; json: unknown };
+  /** agent-sdk mode only: which layer denied the call (the MarketMind guard hook or a permission rule). */
+  deniedBy?: "guard" | "permission" | "canUseTool" | null;
+}
+
+/** Where the events came from. The two sources are never mixed or presented as each other. */
+export type TraceSource = "claude-cli-stream-json" | "agent-sdk";
+
+/** The investigator's view: the subagent in the CLI harness, the main thread in the SDK harness. */
+export interface InvestigatorView {
+  scope: "main" | "subagent";
+  finalText: string;
+  models: string[];
+  completed: boolean;
+}
+
+/** Facts only the SDK harness records (configuration and in-process guard evidence). */
+export interface SdkFacts {
+  status: string;
+  statusDetail: string;
+  sdkVersion: string;
+  mainThreadAgent: string;
+  agentDefinitionSha256: string;
+  agentSha256: string;
+  permissionMode: string;
+  allowedTools: string[];
+  builtinTools: string[];
+  settingSources: string[];
+  strictMcpConfig: boolean;
+  optionsDigest: string;
+  /** Pre-prompt gate. */
+  preflightPassed: boolean | null;
+  /** First system/init after release; null when that phase was not reached. */
+  effectiveSessionPassed: boolean | null;
+  agentsAvailable: string[];
+  /** agent_type values seen by the PreToolUse guard for MarketMind calls (main thread: the --agent name). */
+  guardAgentTypes: string[];
+  guardDenials: number;
+  canUseToolCalls: number;
+  nestedAgentMessages: number;
+  cleanupProblems: string[];
 }
 
 export interface ParsedTrace {
+  source: TraceSource;
+  investigator: InvestigatorView;
+  sdk: SdkFacts | null;
   problems: string[];
   lineCount: number;
   init: { claudeCodeVersion: string | null; mainModel: string | null; permissionMode: string | null; tools: string[]; agents: string[]; skills: string[]; mcpServers: { name: string; status: string }[] } | null;
@@ -73,6 +116,9 @@ export function parseTrace(text: string): ParsedTrace {
   });
 
   const trace: ParsedTrace = {
+    source: "claude-cli-stream-json",
+    investigator: { scope: "subagent", finalText: "", models: [], completed: false },
+    sdk: null,
     problems,
     lineCount: lines.length,
     init: null,
@@ -174,6 +220,7 @@ export function parseTrace(text: string): ParsedTrace {
   trace.subagent.types = [...types].sort();
   trace.subagent.parents = [...parents].sort();
   trace.subagent.models = [...models].sort();
+  trace.investigator = { scope: "subagent", finalText: trace.subagent.finalText, models: trace.subagent.models, completed: trace.subagent.completed };
   return trace;
 }
 

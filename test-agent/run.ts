@@ -1,7 +1,11 @@
 // Bounded real-agent evaluation runner (manual; uses model quota; never part of CI).
 //
 //   npx tsx test-agent/run.ts --scenario S01[,S03] | --all [--repeat N] [--out <dir>]
-//        [--max-budget-usd 0.40] [--total-budget-usd 3] [--timeout-ms 300000]
+//        [--max-budget-usd 0.40] [--total-budget-usd 3] [--timeout-ms 300000] [--harness cli|sdk]
+//
+// --harness sdk runs the Stage 2.6 Agent SDK application (agent-sdk/) instead of `claude -p`, only for the
+// approved subset and the P01 permission probe (sdkRun.ts SDK_ALLOWED), never with --all, and only with ANTHROPIC_API_KEY set (an API key
+// is billed separately from a Claude subscription; Claude Code login credentials are never used).
 //
 // Each run: a fresh temp project holding only copies of the investigator files (so the main session
 // cannot read golden expectations or sources), a freshly seeded synthetic database (or a missing one),
@@ -9,86 +13,23 @@
 // mode. The runner records the trace and run metadata, then grades everything offline (eval/evaluate.ts).
 // It stops before a run that could exceed the total budget, kills the whole process tree on timeout and
 // sweeps for orphaned fixture servers.
-import { spawn, spawnSync } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { evaluateDir, LAUNCHED, runKeyOf } from "./eval/evaluate.js";
+import { evaluateDir, historicalArtifacts, historicalMessage, LAUNCHED, runKeyOf } from "./eval/evaluate.js";
 import { promptFor, SCENARIO_SET, SCENARIOS, scenarioById, type EvalScenario } from "./eval/scenarios.js";
 import { RUN_CONTRACT, RunMeta, stableJson } from "./eval/schema.js";
 import { renderScorecard } from "./eval/scorecard.js";
+import { parseExecution } from "./eval/sdkTrace.js";
 import { parseTrace } from "./eval/trace.js";
 import { FIXTURE_REVISION, fixtureDigest, seedEvalDb } from "./fixtures.js";
+import { realDeps } from "../agent-sdk/cli.js";
+import { probeFailures, runSdkOne, SDK_ALLOWED } from "./sdkRun.js";
+import { INVESTIGATOR_FILES, investigator, killTree, processesTagged, REPO, repoState, sha256, treeHash } from "./processes.js";
 
-const REPO = fileURLToPath(new URL("..", import.meta.url));
-export const BASELINE_TAG = "v0.5.0";
-export const INVESTIGATOR_FILES = { agent: ".claude/agents/market-investigator.md", skill: ".claude/skills/investigate-market/SKILL.md", settings: ".claude/settings.json" } as const;
-
-const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
-const git = (...args: string[]) => spawnSync("git", args, { cwd: REPO, encoding: "utf8" });
-const repoState = () => sha256(`${git("status", "--porcelain").stdout}\n${git("diff").stdout}`);
-
-/** Hash of every file below a directory (relative path + content), for detecting writes. */
-function treeHash(dir: string): string {
-  const parts: string[] = [];
-  const walk = (d: string) => {
-    for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-      const p = join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else parts.push(`${relative(dir, p)}\0${sha256(readFileSync(p))}`);
-    }
-  };
-  if (existsSync(dir)) walk(dir);
-  return sha256(parts.join("\n"));
-}
-
-function investigator(): RunMeta["investigator"] {
-  const hash = (p: string) => sha256(readFileSync(join(REPO, p)));
-  const baseline = (p: string) => {
-    const r = spawnSync("git", ["show", `${BASELINE_TAG}:${p}`], { cwd: REPO });
-    return r.status === 0 ? sha256(r.stdout) : null;
-  };
-  const files = Object.values(INVESTIGATOR_FILES);
-  const base = files.map(baseline);
-  const head = git("rev-parse", "HEAD");
-  const dirty = git("diff", "--quiet", "HEAD", "--", ...files);
-  return {
-    agentSha256: hash(INVESTIGATOR_FILES.agent),
-    skillSha256: hash(INVESTIGATOR_FILES.skill),
-    settingsSha256: hash(INVESTIGATOR_FILES.settings),
-    baselineTag: BASELINE_TAG,
-    matchesBaseline: base.some((b) => b === null) ? null : files.every((f, i) => hash(f) === base[i]),
-    gitCommit: head.status === 0 ? head.stdout.trim() : null,
-    gitDirty: dirty.status === null ? null : dirty.status !== 0,
-  };
-}
-
-/** Process ids whose command line contains `tag` (excluding the querying process itself). */
-function processesTagged(tag: string): number[] {
-  if (process.platform === "win32") {
-    const ps = spawnSync("powershell", ["-NoProfile", "-Command", `Get-CimInstance Win32_Process -Filter "CommandLine LIKE '%${tag}%'" | Where-Object { $_.ProcessId -ne $PID } | ForEach-Object { $_.ProcessId }`], { encoding: "utf8" });
-    return ps.stdout.split(/\s+/).filter(Boolean).map(Number).filter((n) => Number.isInteger(n) && n !== process.pid);
-  }
-  const pg = spawnSync("pgrep", ["-f", tag], { encoding: "utf8" });
-  return pg.stdout.split(/\s+/).filter(Boolean).map(Number).filter((n) => n !== process.pid);
-}
-
-function killTree(pid: number): void {
-  if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
-  else {
-    try {
-      process.kill(-pid, "SIGKILL");
-    } catch {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        /* already gone */
-      }
-    }
-  }
-}
+export { BASELINE_TAG, INVESTIGATOR_FILES } from "./processes.js";
 
 interface Options {
   out: string;
@@ -106,7 +47,12 @@ function launched(out: string): { runs: { runKey: string; scenarioId: string; re
 function spentSoFar(out: string, cap: number): number {
   return launched(out).runs.reduce((sum, r) => {
     const trace = join(out, r.runKey, "trace.jsonl");
-    const cost = existsSync(trace) ? parseTrace(readFileSync(trace, "utf8")).result?.costUsd : null;
+    const execution = join(out, r.runKey, "execution.json");
+    const cost = existsSync(trace)
+      ? parseTrace(readFileSync(trace, "utf8")).result?.costUsd
+      : existsSync(execution)
+        ? parseExecution(readFileSync(execution, "utf8")).result?.costUsd
+        : null;
     return sum + (cost ?? cap);
   }, 0);
 }
@@ -188,6 +134,7 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
     const after = { db: dbHash(), repo: repoState(), project: treeHash(project) };
     const meta = RunMeta.parse({
       contract: RUN_CONTRACT,
+      execution: { mode: "claude-cli", artifact: "trace.jsonl" },
       runKey,
       scenarioId: s.id,
       scenarioSet: SCENARIO_SET,
@@ -241,13 +188,36 @@ async function main(): Promise<void> {
     timeoutMs: Number(option("--timeout-ms") ?? "300000"),
   };
   const repeat = Number(option("--repeat") ?? "1");
+  const harness = option("--harness") ?? "cli";
+  if (harness !== "cli" && harness !== "sdk") {
+    console.error("--harness must be cli or sdk");
+    process.exit(2);
+  }
+  if (harness === "sdk") {
+    const outside = (scenarios as EvalScenario[]).filter((s) => !SDK_ALLOWED.includes(s.id));
+    if (process.argv.includes("--all") || outside.length > 0) {
+      console.error(`--harness sdk runs only the approved subset and probe ${SDK_ALLOWED.join(",")} (never --all)`);
+      process.exit(2);
+    }
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("--harness sdk needs ANTHROPIC_API_KEY (a Claude Console API key); nothing was started");
+      process.exit(2);
+    }
+  }
   const inRepo = relative(REPO, o.out);
   if (!inRepo.startsWith("..") && !inRepo.startsWith(".eval-out")) {
     console.error("--out inside the repository must be under .eval-out/ (gitignored)");
     process.exit(2);
   }
+  // Grading runs last and would refuse this directory; stop before any model usage is spent.
+  const older = historicalArtifacts(o.out);
+  if (older.length > 0) {
+    console.error(historicalMessage(o.out, older));
+    process.exit(2);
+  }
   mkdirSync(o.out, { recursive: true });
   console.log(`output: ${o.out}`);
+  const launchedKeys: string[] = [];
   for (const s of scenarios as EvalScenario[]) {
     for (let k = 0; k < repeat; k++) {
       const existing = launched(o.out).runs.filter((r) => r.scenarioId === s.id).length;
@@ -256,12 +226,24 @@ async function main(): Promise<void> {
         console.log(`budget stop: spent ~$${spent.toFixed(3)} + per-run cap $${o.maxBudgetUsd} > total $${o.totalBudgetUsd}; not launching ${s.id}`);
         break;
       }
-      await runOne(s, existing + 1, o);
+      launchedKeys.push(runKeyOf(s.id, existing + 1));
+      if (harness === "sdk") {
+        const sdk = await import("@anthropic-ai/claude-agent-sdk");
+        const io = { stdout: (t: string) => process.stdout.write(t), stderr: (t: string) => process.stderr.write(t), env: process.env };
+        const meta = await runSdkOne(s, existing + 1, o, realDeps(io, sdk.query));
+        console.log(`${meta.runKey}: agent-sdk run recorded${meta.launchError ? ` (${meta.launchError})` : ""}`);
+      } else await runOne(s, existing + 1, o);
     }
   }
-  const { scorecard } = await evaluateDir(o.out);
+  const { results, scorecard } = await evaluateDir(o.out);
   console.log(renderScorecard(scorecard));
   if (existsSync(o.out) && statSync(o.out).isDirectory()) console.log(`results: ${o.out}`);
+  const failures = probeFailures(scenarios as EvalScenario[], launchedKeys, results);
+  for (const f of failures) console.error(`REQUIRED PROBE NOT PASSED: ${f}`);
+  if (failures.length > 0) {
+    console.error("the artifacts were preserved; exiting 1 because a required probe did not pass");
+    process.exitCode = 1;
+  }
 }
 
 await main();

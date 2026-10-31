@@ -1,0 +1,1374 @@
+{
+  "archive": {
+    "file": "v0.5.0-baseline.tar.gz",
+    "sha256": "f540043c31c54da19ea71add2f5b704efd10c3f39f778479abf5255e465f5fb7"
+  },
+  "baseline": "v0.5.0",
+  "contract": "marketmind.eval.baseline-manifest/1",
+  "files": [
+    {
+      "bytes": 8971,
+      "path": "P01-r1/result.json",
+      "sha256": "6d4c2b6ccdbfb64be5caea6284afa501644cd30637f0adeb2ec553bc2e503b9d"
+    },
+    {
+      "bytes": 2223,
+      "path": "P01-r1/run.json",
+      "sha256": "906db844c37f58cc4da4d843175cded33b550043345c9fc6de68dc34832ec60b"
+    },
+    {
+      "bytes": 0,
+      "path": "P01-r1/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 30981,
+      "path": "P01-r1/trace.jsonl",
+      "sha256": "3a459d06008f5251b296628720e1689d098a29daa02009d1b4db289c5472bb83"
+    },
+    {
+      "bytes": 12552,
+      "path": "S01-r1/result.json",
+      "sha256": "bf7efcf7d533932dd48f26af509df0ba5e6b5290989e794083406700c669d965"
+    },
+    {
+      "bytes": 1029,
+      "path": "S01-r1/review.json",
+      "sha256": "8355aecef91f459d565661a48a24bd06de08f67b4aa17f2444b69b73e22f5267"
+    },
+    {
+      "bytes": 2285,
+      "path": "S01-r1/run.json",
+      "sha256": "cd78ce64e503f5bfffcdc087bb073fdb973ed490b83fbce97fb2f371b9770c4f"
+    },
+    {
+      "bytes": 308,
+      "path": "S01-r1/stderr.txt",
+      "sha256": "5a05ea9b7f907a94fe0ace067e94298cd28144eb8a534cadad32bf10a040fbca"
+    },
+    {
+      "bytes": 56750,
+      "path": "S01-r1/trace.jsonl",
+      "sha256": "04aaed67fc8d7d422ac69ead4bb9a0594aa04b14e6a4fd23d2912b6faf621a82"
+    },
+    {
+      "bytes": 12552,
+      "path": "S01-r2/result.json",
+      "sha256": "83ef265c68eab05463f8940502c8d550105f2d3dab35ba694e64656c9130323e"
+    },
+    {
+      "bytes": 1029,
+      "path": "S01-r2/review.json",
+      "sha256": "6edb2edf7f2519af6cbda3ed208eb797e45890819bece56974dc2e6540c276ad"
+    },
+    {
+      "bytes": 2285,
+      "path": "S01-r2/run.json",
+      "sha256": "11cba25749c3dbb3e97dbe888083b2f6c7582e762dffe3a3df430e0dbbd3d690"
+    },
+    {
+      "bytes": 308,
+      "path": "S01-r2/stderr.txt",
+      "sha256": "ff9a3fbfc6bf5f2724f6489b306c32325b2486f2e8a37a5c664dade0e48e9b82"
+    },
+    {
+      "bytes": 54566,
+      "path": "S01-r2/trace.jsonl",
+      "sha256": "cb493e562405ea43d72acc0a2adc84a9c2c18434fefd9ba04b9f7b6a0aae3d84"
+    },
+    {
+      "bytes": 12564,
+      "path": "S01-r3/result.json",
+      "sha256": "fc5e05425a52c0566c16aa3d15cb47967e3f7e449200f0686804ae6ea88d0da4"
+    },
+    {
+      "bytes": 1029,
+      "path": "S01-r3/review.json",
+      "sha256": "246ca0ecf2a0d7f1d4785df298de6f8bd06421dae5f1b16e123fa2bce57455c4"
+    },
+    {
+      "bytes": 2285,
+      "path": "S01-r3/run.json",
+      "sha256": "b01109b1e345157de8125dd516c25c36a5b8d0092bd07e8001765c0bb03d6931"
+    },
+    {
+      "bytes": 308,
+      "path": "S01-r3/stderr.txt",
+      "sha256": "b40988574d39d776c08668ebe50e6425c8c6fc8cc29e4f405b4a45c9367211ef"
+    },
+    {
+      "bytes": 60049,
+      "path": "S01-r3/trace.jsonl",
+      "sha256": "5e276e8b45c9852375f650337b51df5682fc7c9d17672870e1b2ed7396a3819b"
+    },
+    {
+      "bytes": 13688,
+      "path": "S02-r1/result.json",
+      "sha256": "8d944f711d1dcfd9e7b5f7bc800dee2989dfd389e0fd4dca4c325425c26808e5"
+    },
+    {
+      "bytes": 1186,
+      "path": "S02-r1/review.json",
+      "sha256": "9c3d2a6c51bfc683ab5d58b25d0e3886e99fdd37d547e16d8f77888a82002898"
+    },
+    {
+      "bytes": 2285,
+      "path": "S02-r1/run.json",
+      "sha256": "a66b38b65611af376d9ba7c763bb1181d5ace8b2f084a1aa90ac3bd67fb879e8"
+    },
+    {
+      "bytes": 308,
+      "path": "S02-r1/stderr.txt",
+      "sha256": "c667a41de6f778cb052d4c6318dfb3e569fe0bd464818b5b47265e6e2f3c6705"
+    },
+    {
+      "bytes": 61729,
+      "path": "S02-r1/trace.jsonl",
+      "sha256": "bd206e8fbfefa30877c9144fd314d51586254d5a45dfeb4421d46d6f46e515c6"
+    },
+    {
+      "bytes": 15251,
+      "path": "S03-r1/result.json",
+      "sha256": "a96e66a3711307f8b29caf1a42c398294e5d0f549754d3335c55ed8056ae33c1"
+    },
+    {
+      "bytes": 1029,
+      "path": "S03-r1/review.json",
+      "sha256": "3a48f550c36faa16ea0c811c9040e5f2e9edfbb085bba511a751ad1ef1f641b1"
+    },
+    {
+      "bytes": 2285,
+      "path": "S03-r1/run.json",
+      "sha256": "0f2aaf042f40cfedad1380e575ae1b150533c45d720438e8c2be569583bb1edc"
+    },
+    {
+      "bytes": 308,
+      "path": "S03-r1/stderr.txt",
+      "sha256": "bedc0accc902fdc024c00a431b2e152cf21dc0ad33fb37b0c525783b9378fbfa"
+    },
+    {
+      "bytes": 61552,
+      "path": "S03-r1/trace.jsonl",
+      "sha256": "a3bac3efbc082257ea70935fb3eaa98587d8d99508a6919f6ccf3a06c1d47b9c"
+    },
+    {
+      "bytes": 13460,
+      "path": "S03-r2/result.json",
+      "sha256": "4e0e1a4e398699f9dfbdd27fa41ed0172ae455c9ab27956963ee86425fb09860"
+    },
+    {
+      "bytes": 1029,
+      "path": "S03-r2/review.json",
+      "sha256": "6b047bf7a1583eb0028d2c91a2bbae8f4a978a1dd8df0aafc0f3b37d2cca6a67"
+    },
+    {
+      "bytes": 2285,
+      "path": "S03-r2/run.json",
+      "sha256": "bdc3f8e29fae63a3b173ca805a3cbc17f3e4b749ca896a859539af0be14139bb"
+    },
+    {
+      "bytes": 308,
+      "path": "S03-r2/stderr.txt",
+      "sha256": "e67bdb2947892c51c98e52ebd202cb521c09df682bee62934b3e2e723ed57688"
+    },
+    {
+      "bytes": 62018,
+      "path": "S03-r2/trace.jsonl",
+      "sha256": "1b1028ef131786071162ad626b7bce8427e0c79aa845e28363c3bcb0dad300f1"
+    },
+    {
+      "bytes": 13457,
+      "path": "S03-r3/result.json",
+      "sha256": "e0a4e7bc1516ca992d8df40adf5d08a5f4d4a0c3991a3fabd64d58d705fb42d3"
+    },
+    {
+      "bytes": 1029,
+      "path": "S03-r3/review.json",
+      "sha256": "bc77c0dda0c471d1a28f62b1ce6740c9b1a4bdcd5a334d7ca02710525864ffa2"
+    },
+    {
+      "bytes": 2285,
+      "path": "S03-r3/run.json",
+      "sha256": "88e698ee7e7cdf7a704bee7aa13f6633f993be955add48a3501fa0d779618aed"
+    },
+    {
+      "bytes": 308,
+      "path": "S03-r3/stderr.txt",
+      "sha256": "009df69b50796ba06fd44ed4de2919733234cc5b336d14e28691398d30161ed1"
+    },
+    {
+      "bytes": 67841,
+      "path": "S03-r3/trace.jsonl",
+      "sha256": "3e166e7ec6d740ebfdb5c0ecf4f2cad175a2482b307ee4b465a3ebcafacfaab8"
+    },
+    {
+      "bytes": 10917,
+      "path": "S04-r1/result.json",
+      "sha256": "2ae4f1d747f0b518c77d2e128886cfe045089d1271cdcf99ce0161ac049bfb8f"
+    },
+    {
+      "bytes": 1186,
+      "path": "S04-r1/review.json",
+      "sha256": "9a787f4f2d60d0f7094a64ff27becc4393816348844f7bb19d72931eb04e6ce4"
+    },
+    {
+      "bytes": 2285,
+      "path": "S04-r1/run.json",
+      "sha256": "ee76f868cbbcb84f8f398d25a5c660fe244884468d667248cd68d7899d114cc9"
+    },
+    {
+      "bytes": 308,
+      "path": "S04-r1/stderr.txt",
+      "sha256": "86b4435ccc1f792f71b43513dc4788edf45fa65087cbaa005f25ea0442d576bb"
+    },
+    {
+      "bytes": 59777,
+      "path": "S04-r1/trace.jsonl",
+      "sha256": "5035a5044bbbaed83e9daf5d1671ed37a5da33d828288fadaef3d95a8225d18e"
+    },
+    {
+      "bytes": 11315,
+      "path": "S05-r1/result.json",
+      "sha256": "b1884e7146de64b384175a04ea4a6991af355464a14dbe40b7ec02e11ef08f8b"
+    },
+    {
+      "bytes": 1029,
+      "path": "S05-r1/review.json",
+      "sha256": "2d19965efb453197c05bb1008c8f3b1107eac0a9882956f1e8270448c982e2a6"
+    },
+    {
+      "bytes": 2285,
+      "path": "S05-r1/run.json",
+      "sha256": "61d784724967c51b57b035e58abe1c48d74ceb284663ce5b453cad9cdb9e025e"
+    },
+    {
+      "bytes": 308,
+      "path": "S05-r1/stderr.txt",
+      "sha256": "33b835adf6d18db3e36638b0902683421530a50111d86729d995e666e095690a"
+    },
+    {
+      "bytes": 63676,
+      "path": "S05-r1/trace.jsonl",
+      "sha256": "f5d4eb4206b954121c2b8928830ce5d82d981753f3138f12f86c10a7bed3f064"
+    },
+    {
+      "bytes": 13537,
+      "path": "S06-r1/result.json",
+      "sha256": "89eb425796ebc6f34decbf1e1d302bb41c8c63670447ab7a97ef749328072a18"
+    },
+    {
+      "bytes": 1214,
+      "path": "S06-r1/review.json",
+      "sha256": "cb7a5851b90b3723ed81a8ff8b4f003f51393d6f348ebdbd28c11d91885fd612"
+    },
+    {
+      "bytes": 2285,
+      "path": "S06-r1/run.json",
+      "sha256": "7ed1dd9536488a9f8fb5784635e69feca3b780df95896ea671a20674d2eeaacb"
+    },
+    {
+      "bytes": 308,
+      "path": "S06-r1/stderr.txt",
+      "sha256": "60c60adc3ef5b4596e2500a7c01fe1892a683a1e275b0bd069b6b89f6bb480c0"
+    },
+    {
+      "bytes": 66500,
+      "path": "S06-r1/trace.jsonl",
+      "sha256": "15159563cb15a36aa4c88eefbe779b7b219b675b6e967786361ce1acbb300ba5"
+    },
+    {
+      "bytes": 13613,
+      "path": "S06-r2/result.json",
+      "sha256": "0159b3e8d15a0520c33da8d63e4a06e11213210c8e5dbef442c4b053add5d5e8"
+    },
+    {
+      "bytes": 1214,
+      "path": "S06-r2/review.json",
+      "sha256": "6bc7f077197d70388b5edacb0fa09d686e0200e2458c7534e7abde641175a4cf"
+    },
+    {
+      "bytes": 2285,
+      "path": "S06-r2/run.json",
+      "sha256": "acef4a2a36bcdbc314319c0a58d2eb4eef001b5c7d4cc5d827c158879d3fd10d"
+    },
+    {
+      "bytes": 308,
+      "path": "S06-r2/stderr.txt",
+      "sha256": "3ac7f99f83e4e7892ab1ec47a8391cdf48220dd61b530f62e201afd607920462"
+    },
+    {
+      "bytes": 65950,
+      "path": "S06-r2/trace.jsonl",
+      "sha256": "0638693e8391a12cbc7a4565b76d9cf85dae1fdf14507755e8fea14d8d8e103f"
+    },
+    {
+      "bytes": 13536,
+      "path": "S06-r3/result.json",
+      "sha256": "40d726c7e5573f81bb4fa66bbbdaa2cc6039d4a976f39029dd976f28e91534df"
+    },
+    {
+      "bytes": 1214,
+      "path": "S06-r3/review.json",
+      "sha256": "baca72214bc100ae78556c5f72c46b0770a7f9eb4714640c80cd608c61ecb12f"
+    },
+    {
+      "bytes": 2285,
+      "path": "S06-r3/run.json",
+      "sha256": "853aef796a190f1476da6d6da6c49e7e3523c5207e6848ce36dc9223e4a596a6"
+    },
+    {
+      "bytes": 308,
+      "path": "S06-r3/stderr.txt",
+      "sha256": "7a7440c529ed7be674e5d9f3ea40bf2a03bc274464c0e0a346a0247bfb6473fd"
+    },
+    {
+      "bytes": 65970,
+      "path": "S06-r3/trace.jsonl",
+      "sha256": "5ff2c817481a0955051676d33f35b197e4ca096bbd36446eb69c471b0c95bf14"
+    },
+    {
+      "bytes": 13970,
+      "path": "S07-r1/result.json",
+      "sha256": "26494af5163b174ed37b57764090d152477752d5a8ad2ba225b20baa18b0a5c6"
+    },
+    {
+      "bytes": 1214,
+      "path": "S07-r1/review.json",
+      "sha256": "0f2085616c05506ce935a3be04d8071bec15eba1c649b3006f325d7d0809b5e5"
+    },
+    {
+      "bytes": 2285,
+      "path": "S07-r1/run.json",
+      "sha256": "62ad6869ddfc02c8ff0bddb33c6b3b2a66ff01ae242aff9a57c54271b0c15418"
+    },
+    {
+      "bytes": 308,
+      "path": "S07-r1/stderr.txt",
+      "sha256": "0c0b37a7d7f92fb88536e9ddcf9f09d9319d24dc5069775c4e1b967d64f68cdd"
+    },
+    {
+      "bytes": 60179,
+      "path": "S07-r1/trace.jsonl",
+      "sha256": "b81e0a505262f312b7ec4eb25eed68fb7557c51694b118595a247d9efaac8291"
+    },
+    {
+      "bytes": 13452,
+      "path": "S08-r1/result.json",
+      "sha256": "c36adc7a329c199df28d9f868000fa0914d0a29ad81edfa80da430be48310761"
+    },
+    {
+      "bytes": 1029,
+      "path": "S08-r1/review.json",
+      "sha256": "64406280f0588aa74f806822ffc8ea200ba3aff03bf9adff121e9aaf8bb14782"
+    },
+    {
+      "bytes": 2285,
+      "path": "S08-r1/run.json",
+      "sha256": "05c3ed0aacb0dbf07fba2931d3707c7401b89d50d41e74403f7e1beaa486386a"
+    },
+    {
+      "bytes": 308,
+      "path": "S08-r1/stderr.txt",
+      "sha256": "0b5de9856aca3b758571a10b233b346613b7d58cbfc3ce7db71bdee2f25722ff"
+    },
+    {
+      "bytes": 60204,
+      "path": "S08-r1/trace.jsonl",
+      "sha256": "3071a7794ce75891b31330f9c49f4ebb06dd5e5c770adab1acbef21a209f5def"
+    },
+    {
+      "bytes": 12477,
+      "path": "S09-r1/result.json",
+      "sha256": "1418965665c0a3d73509bf909842a9b8fb5f334e0b779cfc7c9335a971250d31"
+    },
+    {
+      "bytes": 1029,
+      "path": "S09-r1/review.json",
+      "sha256": "9cc7e900668bebd39dc204689c40667e9b8ba0f97cc139f42f3b22a0b2c39978"
+    },
+    {
+      "bytes": 2290,
+      "path": "S09-r1/run.json",
+      "sha256": "a38710e981f163656f95cec752a30999df159321930cc8ce44ece6c7d8182a30"
+    },
+    {
+      "bytes": 308,
+      "path": "S09-r1/stderr.txt",
+      "sha256": "ad8bb3ecd5c0d385864a7b425b12efec496e660dd99c2c7a6a31304cd5a8c991"
+    },
+    {
+      "bytes": 80243,
+      "path": "S09-r1/trace.jsonl",
+      "sha256": "4a6ddecedb7bd108b77bb600fda8144f9d46573ba7c468eccc09ad0455c593e0"
+    },
+    {
+      "bytes": 12477,
+      "path": "S09-r2/result.json",
+      "sha256": "94137133c8391ace3800da039b7eb5a3fe6c8263ce195790d9d49995bd8bbe63"
+    },
+    {
+      "bytes": 1029,
+      "path": "S09-r2/review.json",
+      "sha256": "da5b1887e61b559681f4ec058daa01c1342ee9d5ab8b46a917ec9afc4ac84ffd"
+    },
+    {
+      "bytes": 2290,
+      "path": "S09-r2/run.json",
+      "sha256": "1ef1daedb503920062e047439f93f5bc745e1e9de0acbf34d6d58d026ed4e1e1"
+    },
+    {
+      "bytes": 308,
+      "path": "S09-r2/stderr.txt",
+      "sha256": "d7aa146751d29e519919551c708f266b8d97db5509a13dedb2e098bb5a750adc"
+    },
+    {
+      "bytes": 83263,
+      "path": "S09-r2/trace.jsonl",
+      "sha256": "e40abff79deb14be16aade659592b14a57aeb01f62685fd985a3405384d397b7"
+    },
+    {
+      "bytes": 12478,
+      "path": "S09-r3/result.json",
+      "sha256": "4b9501d8611efdb7626da7c491311972b0a6541bdae4a9baec2bb45526da0771"
+    },
+    {
+      "bytes": 1029,
+      "path": "S09-r3/review.json",
+      "sha256": "6a434b0e9c3f211c3dc523f516190a92c53f54342c7df4b3e7cdec1b2b3b4444"
+    },
+    {
+      "bytes": 2290,
+      "path": "S09-r3/run.json",
+      "sha256": "0e14bf2ce62d841f8ca380e7c7ceb72fb669af46eca7aa782ee0157cad92e58a"
+    },
+    {
+      "bytes": 308,
+      "path": "S09-r3/stderr.txt",
+      "sha256": "d20b9ae7d1af206c6876a9197037ebd66f54dcdd817c573b8fbf13f43e90a852"
+    },
+    {
+      "bytes": 80621,
+      "path": "S09-r3/trace.jsonl",
+      "sha256": "43bcc2922144906a65f7c421a67cf0eb43fbe0dc851f227bf55f26d291f29a09"
+    },
+    {
+      "bytes": 13224,
+      "path": "S10-r1/result.json",
+      "sha256": "f71c09d87369a35b0c330b92622a0afca7ea275e91865b26729a94227baf3bf0"
+    },
+    {
+      "bytes": 1275,
+      "path": "S10-r1/review.json",
+      "sha256": "c464237eab588223dc4c37c2d36041151d2049968631a97f3adeee6ab5f5566f"
+    },
+    {
+      "bytes": 2365,
+      "path": "S10-r1/run.json",
+      "sha256": "c72c03c6d2c71ae2256eced737260e2d1f6c1c3dfd90169db51dd02df63fae0d"
+    },
+    {
+      "bytes": 308,
+      "path": "S10-r1/stderr.txt",
+      "sha256": "ea4926d9a183105dd978ec774e043cf4e520289c3a31aef6c7d0b99b107f8035"
+    },
+    {
+      "bytes": 69009,
+      "path": "S10-r1/trace.jsonl",
+      "sha256": "d407201ad3876454af79b61e308f4950fc6372876269787b92df486395004785"
+    },
+    {
+      "bytes": 12717,
+      "path": "S10-r2/result.json",
+      "sha256": "73504f695b0ec88e8f077ecf4fccd23dd89c4e8425f1ab402e2df96ab203485b"
+    },
+    {
+      "bytes": 1275,
+      "path": "S10-r2/review.json",
+      "sha256": "39b20bab190167b1f94cf1eae046031af6db82cfb8db6a6b65ef52e1908d21d3"
+    },
+    {
+      "bytes": 2365,
+      "path": "S10-r2/run.json",
+      "sha256": "2323793716acf71a3f58fd866d6b38dbb6431026a3bfd2e4531772f30919db54"
+    },
+    {
+      "bytes": 308,
+      "path": "S10-r2/stderr.txt",
+      "sha256": "afc7b736a26db3470a123b5efae42657d6aebcffcd2d837449af8baa7ba1d9b7"
+    },
+    {
+      "bytes": 66408,
+      "path": "S10-r2/trace.jsonl",
+      "sha256": "cbb3bd0b5516d804b49118e1784045920c3f0ebdb902806ff13e433600cbaee6"
+    },
+    {
+      "bytes": 12729,
+      "path": "S10-r3/result.json",
+      "sha256": "3b3838d43d3d6876697efb12e9ef9b36e29c693377767d6fb09b824472fd10c5"
+    },
+    {
+      "bytes": 1275,
+      "path": "S10-r3/review.json",
+      "sha256": "a2245cb8fcf75aca251803fb8045e7b430ffe96971a2c87479123a91ea011050"
+    },
+    {
+      "bytes": 2365,
+      "path": "S10-r3/run.json",
+      "sha256": "2bc1bbd07514101630e51eb4b4e7ae466f521eee14009f132fb42e3e385c7dff"
+    },
+    {
+      "bytes": 308,
+      "path": "S10-r3/stderr.txt",
+      "sha256": "f179f514e7168189fe48c1a13ff61c1d8f6d9eac486bd6e2ce6fa1ff62afed8c"
+    },
+    {
+      "bytes": 63541,
+      "path": "S10-r3/trace.jsonl",
+      "sha256": "db4da22d76f1d755d11f1e7f882d6ae5b9be185f031c1907defb6bf5dd39d8ac"
+    },
+    {
+      "bytes": 11325,
+      "path": "S11-r1/result.json",
+      "sha256": "56efd66c4cc5f70e2498dc81a87f970396b35b59fa392a76cb8c514f8d10262b"
+    },
+    {
+      "bytes": 1186,
+      "path": "S11-r1/review.json",
+      "sha256": "09952a022f97bae9a7e9726a225e7bb5dfdf816b246a3c504f26fe120a5a55fa"
+    },
+    {
+      "bytes": 2161,
+      "path": "S11-r1/run.json",
+      "sha256": "020d128f9e2aff1cbed537f1d8dd07aecea3f564d848a584a16ba7dbb85d0adb"
+    },
+    {
+      "bytes": 308,
+      "path": "S11-r1/stderr.txt",
+      "sha256": "4cdcfb1fce63ddae10240b9a2c42b91cedc278f401ebed9104ea122ca622c23a"
+    },
+    {
+      "bytes": 47687,
+      "path": "S11-r1/trace.jsonl",
+      "sha256": "a31c2ed72af01a71cc0ee2ea2dc460fd8c5dbdad2ed76a7e04f70f32ddf7894f"
+    },
+    {
+      "bytes": 11346,
+      "path": "S12-r1/result.json",
+      "sha256": "47f27f88b981f0405e4620b3303be76d27ee1c2286df52b29799ae1de6e2083e"
+    },
+    {
+      "bytes": 1186,
+      "path": "S12-r1/review.json",
+      "sha256": "61fbfd0a8e1736c61374458d507631928d854518ca67605246d9420a100fc86c"
+    },
+    {
+      "bytes": 2180,
+      "path": "S12-r1/run.json",
+      "sha256": "b91e97538b935e2ce216cd54fd902057057d566e31ce1c4048b878b839839f1b"
+    },
+    {
+      "bytes": 308,
+      "path": "S12-r1/stderr.txt",
+      "sha256": "4a7befae59b3672d73d25d2cdbe06dbc9f26055e01104df8830e6a9a50324d97"
+    },
+    {
+      "bytes": 65333,
+      "path": "S12-r1/trace.jsonl",
+      "sha256": "ebb796d48d392b7f9b7df59bab3f742a3aeb6b3c4358fb7a6f06c0a656a68278"
+    },
+    {
+      "bytes": 2430,
+      "path": "attributions.json",
+      "sha256": "b5ed780c50e23fefeb0aa5f18aeb419623220e369c8f815326fd6937ceca3e63"
+    },
+    {
+      "bytes": 3191,
+      "path": "launched.json",
+      "sha256": "ecf29ef220ff2b6de6966a6a81dbe0446a9c3434dfb4349b9701a9e6f5c2ee1a"
+    },
+    {
+      "bytes": 26923,
+      "path": "scorecard.json",
+      "sha256": "8be15c8986bf6306dbf46347460421451982a0da9090f6a5b17b0b50d594a587"
+    },
+    {
+      "bytes": 10775,
+      "path": "scorecard.md",
+      "sha256": "d4764d0bb579fe861f6a2c7393d2139a7c9b26dfd4b13322da3eae78ca3884ca"
+    }
+  ],
+  "graderRevision": "eval-graders/2",
+  "metrics": {
+    "authorizedToolUse": "57/57 = 100.0% (excluded 0)",
+    "classificationAcceptance": "22/22 = 100.0% (excluded 0)",
+    "completion": "22/22 = 100.0% (excluded 0)",
+    "confirmedCitationValidity": "96/96 = 100.0% (excluded 11)",
+    "correctAbstention": "14/14 = 100.0% (excluded 0)",
+    "delegation": "22/22 = 100.0% (excluded 0)",
+    "mandatoryFactCoverage": "56/56 = 100.0% (excluded 0)",
+    "preciseNumericAssertions": "248/248 = 100.0% (excluded 1)",
+    "timeouts": "0/22 = 0.0% (excluded 0)",
+    "toolSelection": "22/22 = 100.0% (excluded 0)"
+  },
+  "runs": [
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:NOT_EVALUATED",
+        "D8:PASS",
+        "D9:NOT_EVALUATED",
+        "E1:PASS",
+        "P1:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:NOT_EVALUATED",
+        "D13b:NOT_EVALUATED",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "PASS",
+      "runKey": "P01-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S01-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S01-r2"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S01-r3"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:NOT_EVALUATED",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:PASS",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "NEEDS_REVIEW",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S02-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:NOT_EVALUATED",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "NEEDS_REVIEW",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S03-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S03-r2"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S03-r3"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NEEDS_REVIEW",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "NEEDS_REVIEW",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S04-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S05-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S06-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:NEEDS_REVIEW",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "NEEDS_REVIEW",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S06-r2"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S06-r3"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:NEEDS_REVIEW",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "NEEDS_REVIEW",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S07-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NOT_EVALUATED",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S08-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:PASS",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S09-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:PASS",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S09-r2"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:PASS",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S09-r3"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:NEEDS_REVIEW",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:NEEDS_REVIEW",
+        "D15:NEEDS_REVIEW",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "NEEDS_REVIEW",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S10-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:PASS",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S10-r2"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:PASS",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S10-r3"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:PASS",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S11-r1"
+    },
+    {
+      "checks": [
+        "D0:PASS",
+        "F1:PASS",
+        "F2:PASS",
+        "D17:PASS",
+        "D1:PASS",
+        "D2:PASS",
+        "D3:PASS",
+        "D4:PASS",
+        "D4b:PASS",
+        "D5a:PASS",
+        "D5b:PASS",
+        "D5c:PASS",
+        "D6:PASS",
+        "D7:PASS",
+        "D8:PASS",
+        "D9:PASS",
+        "E1:PASS",
+        "E2:PASS",
+        "D10:PASS",
+        "D11:PASS",
+        "D12:PASS",
+        "D13a:PASS",
+        "D13b:PASS",
+        "D14:PASS",
+        "D15:PASS",
+        "D16:PASS"
+      ],
+      "deterministicVerdict": "PASS",
+      "overallVerdict": "NEEDS_REVIEW",
+      "runKey": "S12-r1"
+    }
+  ]
+}

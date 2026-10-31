@@ -1,11 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ATTRIBUTIONS, evaluateDir, LAUNCHED } from "../../test-agent/eval/evaluate.js";
+import { ATTRIBUTIONS, evaluateDir, HistoricalArtifactsError, historicalArtifacts, LAUNCHED } from "../../test-agent/eval/evaluate.js";
 import { computeGolden } from "../../test-agent/eval/golden.js";
+import { GRADER_REVISION } from "../../test-agent/eval/graders.js";
 import { scenarioById } from "../../test-agent/eval/scenarios.js";
-import { stableJson } from "../../test-agent/eval/schema.js";
+import { RESULT_CONTRACT, SCORECARD_CONTRACT, stableJson } from "../../test-agent/eval/schema.js";
 import { buildTrace, goodReport, runMeta } from "../evalTraces.js";
 
 // Stage 2.5: grading a recorded output directory end to end, offline.
@@ -93,5 +94,84 @@ describe("evaluateDir", () => {
     expect(attributed.results[0]).toMatchObject({ contamination: "environment_interference", deterministicVerdict: "NEEDS_REVIEW" });
     expect(attributed.scorecard.safety).toMatchObject({ status: "INCOMPLETE", provenViolations: 0 });
     expect(readFileSync(join(out, "scorecard.md"), "utf8")).toContain("attributed to environment interference");
+  }, 60_000);
+});
+
+describe("historical artifacts", () => {
+  /** A graded directory, then the given edit, as if it had been written by an earlier grader. */
+  async function recorded(age?: (dir: string) => void): Promise<string> {
+    const out = mkdtempSync(join(tmpdir(), "mm-evaldir-"));
+    dirs.push(out);
+    const s = scenarioById("S02")!;
+    const g = await computeGolden(s);
+    mkdirSync(join(out, "S02-r1"));
+    writeFileSync(join(out, "S02-r1", "run.json"), stableJson(runMeta(s, g)));
+    writeFileSync(
+      join(out, "S02-r1", "trace.jsonl"),
+      await buildTrace(s, [{ name: "mcp__marketmind__inspect_market", args: { marketId: "900102" } }, { name: "mcp__marketmind__get_market_history", args: { marketId: "900102", limit: 10, includeSynthetic: true } }], goodReport(g, { label: "INSUFFICIENT_EVIDENCE" })),
+    );
+    await evaluateDir(out);
+    age?.(out);
+    return out;
+  }
+  const edit = (path: string, change: (j: Record<string, unknown>) => void) => {
+    const j = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    change(j);
+    writeFileSync(path, stableJson(j));
+  };
+  const snapshot = (dir: string) =>
+    Object.fromEntries(
+      (readdirSync(dir, { recursive: true }) as string[]).filter((f) => f.includes(".")).sort().map((f) => [f, readFileSync(join(dir, f), "utf8")]),
+    );
+
+  for (const [what, age] of [
+    ["an older grader revision in a result", (d: string) => edit(join(d, "S02-r1", "result.json"), (j) => (j.graderRevision = "eval-graders/2"))],
+    ["an older result contract", (d: string) => edit(join(d, "S02-r1", "result.json"), (j) => (j.contract = "marketmind.eval.result/2"))],
+    ["an older scorecard contract", (d: string) => edit(join(d, "scorecard.json"), (j) => (j.contract = "marketmind.eval.scorecard/3"))],
+    ["an older scorecard grader revision", (d: string) => edit(join(d, "scorecard.json"), (j) => (j.grader = { revision: "eval-graders/2" }))],
+    ["an unreadable result", (d: string) => writeFileSync(join(d, "S02-r1", "result.json"), "{not json")],
+  ] as const) {
+    it(`refuses to regrade in place over ${what}, and changes nothing`, async () => {
+      const out = await recorded(age);
+      const before = snapshot(out);
+      expect(historicalArtifacts(out)).toHaveLength(1);
+      await expect(evaluateDir(out)).rejects.toBeInstanceOf(HistoricalArtifactsError);
+      await expect(evaluateDir(out)).rejects.toThrow("--output");
+      expect(snapshot(out)).toEqual(before);
+    }, 60_000);
+  }
+
+  it("--output regrades into a separate directory and leaves the recorded one byte-identical", async () => {
+    const out = await recorded((d) => edit(join(d, "S02-r1", "result.json"), (j) => (j.graderRevision = "eval-graders/2")));
+    rmSync(join(out, "S02-r1", "review.json"));
+    const before = snapshot(out);
+    const target = join(mkdtempSync(join(tmpdir(), "mm-regrade-")), "new");
+    dirs.push(target);
+    const { results, scorecard } = await evaluateDir(out, { outputDir: target });
+    expect(snapshot(out)).toEqual(before);
+    expect(results[0]!.graderRevision).toBe(GRADER_REVISION);
+    expect(scorecard.contract).toBe(SCORECARD_CONTRACT);
+    expect((JSON.parse(readFileSync(join(target, "S02-r1", "result.json"), "utf8")) as { contract: string }).contract).toBe(RESULT_CONTRACT);
+    expect(existsSync(join(target, "scorecard.md"))).toBe(true);
+    expect(existsSync(join(target, "S02-r1", "review.json"))).toBe(true);
+    expect(existsSync(join(target, "S02-r1", "run.json"))).toBe(false);
+    // The target is under the same rule: repeating is fine, overwriting older artifacts there is not.
+    await evaluateDir(out, { outputDir: target });
+    edit(join(target, "scorecard.json"), (j) => (j.contract = "marketmind.eval.scorecard/3"));
+    await expect(evaluateDir(out, { outputDir: target })).rejects.toBeInstanceOf(HistoricalArtifactsError);
+  }, 60_000);
+
+  it("a completed review at the current revision still regrades in place", async () => {
+    const out = await recorded();
+    expect(historicalArtifacts(out)).toEqual([]);
+    edit(join(out, "S02-r1", "review.json"), (j) => {
+      j.independentHumanReview = true;
+      j.reviewer = "a person";
+      j.reviewedAt = "2026-10-31";
+      for (const item of Object.values(j.items as Record<string, { verdict: string }>)) item.verdict = "PASS";
+    });
+    const { results } = await evaluateDir(out);
+    expect(results[0]!.review).toMatchObject({ status: "REVIEWED", outcome: "PASS" });
+    expect(results[0]!.overallVerdict).toBe("PASS");
   }, 60_000);
 });

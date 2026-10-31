@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MarketMindError } from "../domain/errors.js";
 
 /** Application version recorded with stored observations. Kept equal to package.json by a test. */
-export const APP_VERSION = "0.6.0";
+export const APP_VERSION = "0.7.0";
 
 /** Default local database, relative to the working directory (ignored by Git). */
 export const DEFAULT_DB_PATH = "data/marketmind.sqlite";

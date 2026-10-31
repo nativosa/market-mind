@@ -76,6 +76,7 @@ export async function buildTrace(s: EvalScenario, calls: PlannedCall[], report: 
 export function runMeta(s: EvalScenario, golden: Golden, overrides: Partial<RunMeta> = {}): RunMeta {
   return {
     contract: RUN_CONTRACT,
+    execution: { mode: "claude-cli", artifact: "trace.jsonl" },
     runKey: `${s.id}-r1`,
     scenarioId: s.id,
     scenarioSet: SCENARIO_SET,

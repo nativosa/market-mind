@@ -24,6 +24,8 @@ MarketMind is an educational, open-source TypeScript project that explores Polym
 
 It also includes a bounded runner for repeated real investigations. The offline layer runs in `npm test`; real runs are opt-in.
 
+**Stage 2.6** runs the same investigator through the official **Claude Agent SDK** in a small CLI (`agent-sdk/`). It adds API-key authentication with credential isolation, a deny-only permission guard, two-phase session validation, timeouts and cleanup, and SDK support in the evaluation framework. Five real-model synthetic investigations and a permission probe are reported in [`docs/evaluation-sdk-stage-2.6.md`](docs/evaluation-sdk-stage-2.6.md), including their known quality failures.
+
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
 
 ## Requirements
@@ -499,7 +501,7 @@ Supportive history means consistent across the recorded samples. Persistence bet
 
 ## Agent evaluation (Stage 2.5)
 
-A small, reproducible evaluation of the unchanged v0.5.0 investigator. The full runbook is [`test-agent/README.md`](test-agent/README.md); the recorded baseline is summarized in [`docs/evaluation-baseline-v0.5.0.md`](docs/evaluation-baseline-v0.5.0.md).
+A small, reproducible evaluation of the unchanged v0.5.0 investigator. The full runbook is [`test-agent/README.md`](test-agent/README.md); the recorded baseline is summarized in [`docs/evaluation-baseline-v0.5.0.md`](docs/evaluation-baseline-v0.5.0.md), and its raw runs are preserved as described in [`docs/evaluation-archive/`](docs/evaluation-archive/README.md).
 
 - **Fixtures:** revision `agent-fixtures/2`.
   - Fictional markets 900100–900109 served from simulated `*.example` hosts, read on a fixed clock (`EVAL_NOW` 2026-10-29T12:00:00Z).
@@ -519,7 +521,7 @@ A small, reproducible evaluation of the unchanged v0.5.0 investigator. The full 
   - review triggers: prohibited phrasing and ungrounded values. Citations and phrases are classed as affirmative, ambiguous, or quoted/described; only affirmative citations enter the validity denominator.
   - Anything the text heuristics cannot tie to a claim is `NEEDS_REVIEW`, never `PASS`.
 - **Layer B, human review:** rubrics R1–R7. A run's overall `PASS` requires a completed independent human review.
-- **Results:** `marketmind.eval.result/2` per run (grader revision `eval-graders/2`), byte-identical when the recorded inputs are identical. The scorecard (`scorecard.json`/`.md`) has:
+- **Results:** `marketmind.eval.result/3` per run (grader revision `eval-graders/5`: `/3` adds the agent-sdk execution mode, `/4` separates provenance (`appVersion`) from substance in D9 replay; the v0.5.0 baseline was graded with `eval-graders/2`), byte-identical when the recorded inputs are identical. The scorecard (`scorecard.json`/`.md`) has:
   - proven safety violations, listed individually, kept apart from integrity drift;
   - accounting for every launched run;
   - metrics as numerator/denominator with exclusions (0/0 is n/a), for all runs and for clean runs only;
@@ -529,7 +531,36 @@ A small, reproducible evaluation of the unchanged v0.5.0 investigator. The full 
 npm test                                              # offline layer (no Claude, no key, no network)
 npx tsx test-agent/run.ts --all                       # opt-in: 12 real investigations (bounded budget)
 npx tsx test-agent/eval/evaluate.ts <outDir>          # re-grade recorded runs offline
+npx tsx test-agent/eval/evaluate.ts <outDir> --output <newDir>   # re-grade older artifacts; the recorded directory is only read
 ```
+
+## Claude Agent SDK investigator (Stage 2.6)
+
+`agent-sdk/` is a small CLI on the official Claude Agent SDK (`@anthropic-ai/claude-agent-sdk` 0.3.302, a dev dependency). It runs the same investigator policy files as the main-thread agent. It adds:
+- a gated pre-flight (credential source, MCP server, tool pool) before any prompt;
+- a PreToolUse guard (five MarketMind tools only, retry and budget limits);
+- timeout and cancellation with process-tree cleanup;
+- a typed result, and a normalized execution record that the evaluation framework grades (`--harness sdk`).
+
+```bash
+npm run agent -- investigate --market-id 900103 --fixture S03 --dry-run   # no credentials, no spawn, no API call
+npm run agent -- investigate --market-id <gammaId> --max-budget-usd 0.25  # needs ANTHROPIC_API_KEY (Console key)
+```
+
+**Authentication and billing.**
+- Real runs need a dedicated `ANTHROPIC_API_KEY` from the Claude Console, set in the launching shell. Each developer uses their own key.
+- API usage is billed to your Console organization, separately from any Claude subscription. Claude Pro or Max subscriptions and Claude Code login credentials are not supported and are never used.
+- `--max-budget-usd` is required and capped at $0.50 per run. Reported costs are client-side estimates, not billing, so set a spend limit on the Console workspace.
+- The SDK is a dev dependency, so install with `npm ci`, not `--omit=dev`.
+
+See [`agent-sdk/README.md`](agent-sdk/README.md) for the security model and for what real runs did and did not verify.
+
+**Evaluation status.** All five synthetic investigations completed with their expected labels, with no observed safety violation or integrity drift. That is not a quality pass:
+- deterministic grading gave 4 PASS and 1 NEEDS_REVIEW;
+- an independent AI-assisted review found evidence-discipline (R4) failures in four reports and a missing sampling disclosure in S09;
+- formal human rubric sign-off has not been done, so every overall verdict is NEEDS_REVIEW.
+
+The tools the injection test asks for were never offered, so that result shows the boundary working rather than general injection resistance. Results are synthetic and small-sample, say nothing about statistical reliability, and are not evidence of profitable trading. Read [`docs/evaluation-sdk-stage-2.6.md`](docs/evaluation-sdk-stage-2.6.md).
 
 ## Architecture
 
@@ -564,6 +595,8 @@ npm test            # offline Vitest suite; real fetch is disabled
 npm run coverage    # v8 coverage with thresholds (90% core modules, 75% global)
 npm run verify      # typecheck + lint + coverage
 npm run smoke       # OPT-IN live smoke test against public endpoints
+npx tsx test-agent/eval/baselineArchive.ts verify   # offline: needs the local v0.5.0 archive (docs/evaluation-archive/)
+npm run agent -- investigate --market-id 900103 --fixture S03 --dry-run   # no credentials, no spawn, no API call
 npx tsx test-agent/run.ts --all        # OPT-IN real-agent evaluation (uses Claude Code model quota)
 ```
 
@@ -614,6 +647,7 @@ Assumptions:
 - **MCP live results are not persisted.** `scan_markets` and `inspect_market` report what was observed at a given time, but cannot be re-verified later. Durable evidence requires `npm run cli -- collect`.
 - **`observationId` is stable within one database file only.** Cite it together with its `runId`.
 - **The MCP server runs TypeScript through `tsx`** (a devDependency), so it needs a normal `npm ci`, not `--omit=dev`.
+- **Development-only audit advisories.** `npm audit --omit=dev` reports 0 vulnerabilities. A full `npm audit` reports 11 moderate advisories in development tooling, all from one issue (minimatch GHSA-g3hv-75wg-m249) through ESLint and typescript-eslint. npm's suggested fix is a downgrade to eslint 4.0.0, so they remain until those tools move on.
 - **Scope.** Polymarket access is read-only and on-demand: there is no streaming, scheduling, monitoring or trading. Repeated collection is your explicit decision; there is no background mode.
 
 ## License

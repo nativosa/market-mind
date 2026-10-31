@@ -4,7 +4,7 @@ This baseline records how the unchanged v0.5.0 `/investigate-market` skill and `
 
 It reports only deterministic results. **No human review has been performed**: all 22 rubric reviews (99 rubric items) are `UNREVIEWED`, so no run has an overall `PASS`.
 
-The runbook and check definitions are in [`test-agent/README.md`](../test-agent/README.md).
+The runbook and check definitions are in [`test-agent/README.md`](../test-agent/README.md). The raw runs are preserved outside Git; see [`evaluation-archive/`](evaluation-archive/README.md).
 
 ## What was evaluated
 

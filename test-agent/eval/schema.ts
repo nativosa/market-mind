@@ -2,10 +2,12 @@
 // (written by the grader), human review (filled in by a person) and the scorecard.
 import { z } from "zod";
 
-export const RUN_CONTRACT = "marketmind.eval.run/1";
-export const RESULT_CONTRACT = "marketmind.eval.result/2";
+/** run/2 adds the execution mode; run/1 files (the frozen CLI baseline) still parse and mean claude-cli. */
+export const RUN_CONTRACT = "marketmind.eval.run/2";
+export const RUN_CONTRACT_V1 = "marketmind.eval.run/1";
+export const RESULT_CONTRACT = "marketmind.eval.result/3";
 export const REVIEW_CONTRACT = "marketmind.eval.review/1";
-export const SCORECARD_CONTRACT = "marketmind.eval.scorecard/2";
+export const SCORECARD_CONTRACT = "marketmind.eval.scorecard/4";
 export const ATTRIBUTION_CONTRACT = "marketmind.eval.attribution/1";
 
 export const Verdict = z.enum(["PASS", "FAIL", "NEEDS_REVIEW", "NOT_EVALUATED"]);
@@ -29,9 +31,21 @@ export const Investigator = z
   })
   .strict();
 
+/** How a run was executed and which artifact holds its events. */
+export const ExecutionMode = z.enum(["claude-cli", "agent-sdk"]);
+export type ExecutionMode = z.infer<typeof ExecutionMode>;
+export const RunExecution = z
+  .object({
+    mode: ExecutionMode,
+    /** trace.jsonl (Claude Code stream-json) or execution.json (marketmind.agent.execution/1). */
+    artifact: z.enum(["trace.jsonl", "execution.json"]),
+  })
+  .strict();
+
 export const RunMeta = z
   .object({
-    contract: z.literal(RUN_CONTRACT),
+    contract: z.enum([RUN_CONTRACT, RUN_CONTRACT_V1]),
+    execution: RunExecution.optional(),
     runKey: z.string(),
     scenarioId: z.string(),
     scenarioSet: z.string(),
@@ -61,8 +75,12 @@ export const RunMeta = z
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .refine((m) => m.contract === RUN_CONTRACT_V1 || m.execution !== undefined, { message: "run/2 records its execution mode" })
+  .refine((m) => m.execution === undefined || (m.execution.mode === "claude-cli") === (m.execution.artifact === "trace.jsonl"), { message: "execution artifact does not match its mode" });
 export type RunMeta = z.infer<typeof RunMeta>;
+/** The execution mode of a run (run/1 files predate the field and are Claude CLI runs). */
+export const executionOf = (m: RunMeta | null): ExecutionMode => m?.execution?.mode ?? "claude-cli";
 
 /**
  * A documented basis for attributing repository drift (D5c) to something other than the agent. Recorded by
@@ -144,6 +162,10 @@ export const EvalResult = z
     fixture: z.object({ revision: z.string().nullable(), recordedDigest: z.string().nullable(), currentDigest: sha, match: z.boolean() }).strict(),
     investigator: Investigator.nullable(),
     claudeCodeVersion: z.string().nullable(),
+    /** Execution provenance: never mixed; agent-sdk events are normalized, not presented as stream-json. */
+    execution: z
+      .object({ mode: ExecutionMode, source: z.enum(["claude-cli-stream-json", "agent-sdk"]).nullable(), sdkVersion: z.string().nullable(), optionsDigest: z.string().nullable() })
+      .strict(),
     models: z.object({ main: z.string().nullable(), subagent: z.array(z.string()) }).strict(),
     executedAt: z.string().nullable(),
     graderRevision: z.string(),
