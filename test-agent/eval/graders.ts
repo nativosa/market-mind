@@ -6,6 +6,7 @@ import {
   LABELS,
   mentionKind,
   mentions,
+  notAsserted,
   numbersIn,
   observationCitations,
   outcomeColumns,
@@ -17,7 +18,7 @@ import {
   unpairedObservationMentions,
   type ParsedReport,
 } from "./report.js";
-import { promptFor, RUBRICS, SCENARIO_SET, type EvalScenario } from "./scenarios.js";
+import { promptFor, RUBRIC_SET, RUBRIC_SET_V1, RUBRICS, rubricsFor, SCENARIO_SET, type EvalScenario } from "./scenarios.js";
 import {
   RESULT_CONTRACT,
   type Attribution,
@@ -32,12 +33,15 @@ import {
   type Verdict,
   executionOf,
 } from "./schema.js";
+import { assessReliability, reliabilityUnavailable } from "./reliability.js";
 import { compareReplay, summarizeReplay, type ReplayComparison } from "./replay.js";
 import { FORKED_PARENT, isMarketMind, parseTrace, shortName, SUBAGENT_TYPE, type ParsedTrace, type ToolCall } from "./trace.js";
 
 /** Grading semantics revision; recorded in every result. Changes are listed in GRADER_CHANGES. */
-export const GRADER_REVISION = "eval-graders/5";
+export const GRADER_REVISION = "eval-graders/7";
 export const GRADER_CHANGES = [
+  "eval-graders/7: D13b locates values in plain outcome lead-ins that close with the index, such as `Yes (index 0, reference). [FACT E2]`. In outcome blocks, a value inside a quotation or rejected by its clause is not an assertion, and conflicting values are not located. This corrects the evaluator only: a newly located value was already in the report, so it is not evidence that the investigator improved. Regrade differences for the v0.5.0 baseline are listed in docs/evaluation-archive/v0.5.0-regrade-deltas.json.",
+  "eval-graders/6: adds the additive reliability block (REL-1 exact identifiers, REL-2 evidence tagging, REL-3 discovery sampling disclosure, REL-4 executability wording; docs/reliability-spec-2.7.md). It also adds rubric sets: rubrics/2 gives S09 R6, and a review is read under the set it was written with, so existing reviews and their status are unchanged. No check, verdict or failure category changes, and reliability findings never feed them.",
   "eval-graders/5: missing evidence is not a violation. An agent-sdk result with is_error is never completed, and api_error withholds quality and review checks because the agent was not tested (D17 still fails). agent-sdk D2 separates confirmed identity (PASS, whether or not the run finished), identity unverified because no MarketMind call reached the guard (NOT_EVALUATED) and a foreign agent or wrong configuration (FAIL). P1 with zero attempts is NOT_EVALUATED, never PASS, and a probe with an unevaluated P1 cannot reach a deterministic PASS. In agent-sdk mode a denial counts only with a permission_denials entry, allow rules on a probe fail P1 and D18, and D18 requires exactly the five allow rules outside probes. Recorded claude-cli traces with tool attempts grade as before.",
   "eval-graders/4: D9 replay fidelity separates provenance from substance. The top-level envelope appVersion (the answering server's APP_VERSION) is set aside; every other field is still compared, including nested database appVersion values, analytics versions and the contract id. A recorded result that is not a complete MarketMind envelope is incomplete, and a different contract id or analyticsVersion set is incompatible: either makes D9 NOT_EVALUATED (a substantive mismatch elsewhere is still a FAIL). When the versions differ, D9 states both and the compatibility assumption. Fixes re-grading the v0.5.0 baseline under v0.6.0, where D9 failed on appVersion alone. Same-version grading is unchanged.",
   "eval-graders/3: adds the agent-sdk execution mode (normalized execution.json, source agent-sdk). In that mode the investigator is the main thread: D2 checks the main-thread investigator identity, D3 checks that no nested agent ran, D18 checks the initialized tool pool and permission configuration, D4b does not apply, and guard-denied calls are categorized guard_denied (not an environment permission failure). claude-cli grading is unchanged apart from the recorded execution provenance.",
@@ -163,7 +167,7 @@ interface Located {
 }
 
 /** Find the value a report asserts for one outcome's metric: per-outcome table first, then that outcome's block. */
-function locate(report: ParsedReport, metric: "spread" | "bid" | "ask" | "midpoint", outcome: { index: number; label: string }, outcomes: { index: number; label: string }[]): Located | null {
+export function locate(report: ParsedReport, metric: "spread" | "bid" | "ask" | "midpoint", outcome: { index: number; label: string }, outcomes: { index: number; label: string }[]): Located | null {
   const s3 = report.section(3);
   const rowKey = { spread: /^spread\b/i, bid: /^best bid\b/i, ask: /^best ask\b/i, midpoint: /^mid(?:point)?\b/i }[metric];
   for (const t of tables(s3)) {
@@ -178,19 +182,25 @@ function locate(report: ParsedReport, metric: "spread" | "bid" | "ask" | "midpoi
   }
   // Block form: a bold or heading line naming the outcome, then lines until the next such header.
   const lines = s3.split(/\r?\n/);
-  // Outcome headers: bold or heading lines, or plain lead-in lines ending with ":" ("Yes (index 0) [FACT E1]:").
-  const header = (l: string) => /^\s*(?:\*\*|#{3,})/.test(l) || /^(?![\s>]*[-*|+\d])\S.*:\s*$/.test(l);
+  // Outcome headers: bold or heading lines, plain lead-in lines ending with ":" ("Yes (index 0) [FACT E1]:"),
+  // or plain lead-ins closing with the index ("Yes (index 0, reference). [FACT E2]").
+  const labels = outcomes.map((o) => o.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const leadIn = new RegExp(`^(?:${labels})\\s*\\(index\\s*\\d+\\b[^)]*\\)\\.?(?:\\s*\\[[^\\]]*\\])?\\s*$`, "i");
+  const header = (l: string) => /^\s*(?:\*\*|#{3,})/.test(l) || /^(?![\s>]*[-*|+\d])\S.*:\s*$/.test(l) || leadIn.test(l.trim());
   const names = (l: string, o: { index: number; label: string }) => new RegExp(`index\\s*${o.index}\\b|\\b${o.label}\\b`, "i").test(l);
   const start = lines.findIndex((l) => header(l) && names(l, outcome) && !outcomes.some((o) => o.index !== outcome.index && names(l, o)));
   if (start < 0) return null;
   let end = lines.findIndex((l, i) => i > start && header(l));
   if (end < 0) end = lines.length;
-  const block = lines.slice(start, end).join("\n");
   const word = { spread: "spread", bid: "best bid", ask: "best ask", midpoint: "midpoint" }[metric];
-  const m = new RegExp(`${word}(?:\\s+is|\\s+of|:|=)?\\s*\`?(-?\\d+(?:\\.\\d+)?|null|none)\`?(?:\\s*\\((?:size\\s*)?(\\d+(?:\\.\\d+)?)\\))?(?:\\s+with size\\s+(\\d+(?:\\.\\d+)?))?`, "i").exec(block);
-  if (!m) return null;
-  const v = /^(null|none)$/i.test(m[1]!) ? null : m[1]!;
-  return { value: v, size: m[2] ?? m[3] ?? null, how: "outcome block" };
+  const claim = new RegExp(`${word}(?:\\s+is|\\s+of|:|=)?\\s*\`?(-?\\d+(?:\\.\\d+)?|null|none)\`?(?!\\d|\\.\\d|\\s*ticks?\\b)(?:\\s*\\((?:size\\s*)?(\\d+(?:\\.\\d+)?)\\))?(?:\\s+with size\\s+(\\d+(?:\\.\\d+)?))?`, "gi");
+  const found = lines.slice(start, end).flatMap((l) => [...l.matchAll(claim)].filter((m) => !notAsserted(l, m.index, m[0].length)));
+  if (found.length === 0) return null;
+  const value = (m: RegExpExecArray | RegExpMatchArray) => (/^(null|none)$/i.test(m[1]!) ? null : m[1]!);
+  const first = found[0]!;
+  // Two different values for one metric of one outcome: the report does not assert either.
+  if (found.some((m) => (value(m) === null) !== (value(first) === null) || (value(first) !== null && !sameNumber(value(m), value(first))))) return null;
+  return { value: value(first), size: first[2] ?? first[3] ?? null, how: "outcome block" };
 }
 
 function usableCounts(report: ParsedReport): string[] {
@@ -574,7 +584,9 @@ export async function gradeRun(input: GradeInput): Promise<EvalResult> {
   }
 
   // Review status.
-  const rubrics = input.scenario.rubrics;
+  // A review is read under the rubric set it was written with; a form that names none predates rubric sets.
+  const rubricSet = input.review ? (input.review.rubricSet ?? RUBRIC_SET_V1) : RUBRIC_SET;
+  const rubrics = rubricsFor(input.scenario, rubricSet);
   let reviewStatus: EvalResult["review"]["status"] = rubrics.length === 0 ? "NOT_REQUIRED" : "UNREVIEWED";
   let reviewOutcome: Verdict | null = null;
   const rv = input.review;
@@ -672,6 +684,8 @@ export async function gradeRun(input: GradeInput): Promise<EvalResult> {
     integrity: integrityState,
     contamination,
     observations,
+    rubricSet: rubrics.length === 0 ? null : rubricSet,
+    reliability: trace ? assessReliability({ mode: s.mode, report: trace.investigator.finalText, calls: subCalls }) : reliabilityUnavailable(s.mode),
     facts: { coverage: coverageOut, assertions },
     checks,
     review: { rubrics: rubrics.map((id) => `${id}: ${RUBRICS[id]}`), status: reviewStatus, outcome: reviewOutcome },
@@ -695,10 +709,11 @@ export function reviewTemplate(runKey: string, scenario: EvalScenario): Review {
   return {
     contract: "marketmind.eval.review/1",
     runKey,
+    rubricSet: RUBRIC_SET,
     independentHumanReview: false,
     reviewer: null,
     reviewedAt: null,
-    items: Object.fromEntries(scenario.rubrics.map((id) => [id, { rubric: RUBRICS[id], verdict: "UNREVIEWED" as const, note: "" }])),
+    items: Object.fromEntries(rubricsFor(scenario, RUBRIC_SET).map((id) => [id, { rubric: RUBRICS[id], verdict: "UNREVIEWED" as const, note: "" }])),
   };
 }
 

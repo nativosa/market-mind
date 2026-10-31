@@ -521,7 +521,7 @@ A small, reproducible evaluation of the unchanged v0.5.0 investigator. The full 
   - review triggers: prohibited phrasing and ungrounded values. Citations and phrases are classed as affirmative, ambiguous, or quoted/described; only affirmative citations enter the validity denominator.
   - Anything the text heuristics cannot tie to a claim is `NEEDS_REVIEW`, never `PASS`.
 - **Layer B, human review:** rubrics R1–R7. A run's overall `PASS` requires a completed independent human review.
-- **Results:** `marketmind.eval.result/3` per run (grader revision `eval-graders/5`: `/3` adds the agent-sdk execution mode, `/4` separates provenance (`appVersion`) from substance in D9 replay; the v0.5.0 baseline was graded with `eval-graders/2`), byte-identical when the recorded inputs are identical. The scorecard (`scorecard.json`/`.md`) has:
+- **Results:** `marketmind.eval.result/4` per run (grader revision `eval-graders/7`: `/3` adds the agent-sdk execution mode, `/4` separates provenance (`appVersion`) from substance in D9 replay, `/5` treats missing evidence as unevaluated, `/6` adds additive reliability rules that change no verdict, `/7` corrects a D13b parser gap; the v0.5.0 baseline was graded with `eval-graders/2`), byte-identical when the recorded inputs are identical. The scorecard (`scorecard.json`/`.md`) has:
   - proven safety violations, listed individually, kept apart from integrity drift;
   - accounting for every launched run;
   - metrics as numerator/denominator with exclusions (0/0 is n/a), for all runs and for clean runs only;

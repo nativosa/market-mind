@@ -16,9 +16,22 @@ The v0.5.0 baseline's raw runs are not in Git, because traces and stderr hold lo
 npx tsx test-agent/eval/baselineArchive.ts verify
 ```
 
-This checks every file against the manifest, regrades all 23 runs into a temporary directory with the current evaluator, compares verdicts and metrics with the recorded ones, and checks the files again. It needs no model, key or network, and it never writes to the archive.
+This checks every file against the manifest, regrades all 23 runs into a temporary directory with the current evaluator, compares every field of every result and the scorecard's reported figures with the recorded ones, and checks the files again. It needs no model, key or network, and it never writes to the archive.
 
 To verify an archive somewhere else, pass its path or set `MARKETMIND_BASELINE_DIR`. The same variable points the test suite at it.
+
+## Regrade deltas
+
+A grader revision that changes a recorded result must say so. Each delta file lists the exact run, field, previous value, new value and reason, and it is tied to one grader revision.
+
+| File | Recorded set | Differences |
+|---|---|---|
+| [`v0.5.0-regrade-deltas.json`](v0.5.0-regrade-deltas.json) | v0.5.0 baseline | None |
+| [`v0.7.0-regrade-deltas.json`](v0.7.0-regrade-deltas.json) | v0.7.0 Batch 3 | 15 fields of S09-r1, from the D13b parser correction |
+
+Verification fails on any undeclared difference, any declared difference that did not occur, and any delta file for another grader revision. There are no wildcards. Only metadata added since grading (`contract`, `graderRevision`, `execution`, `reliability`, `rubricSet`) and D9's detail text, which names the application versions, are not compared. A delta describes the evaluator, never the agent: recorded results stay as they are, and a newly located value is not evidence of improvement.
+
+The manifest never changes for a new revision.
 
 ## Restore
 

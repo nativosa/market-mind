@@ -1,0 +1,7 @@
+{
+  "contract": "marketmind.eval.regrade-deltas/1",
+  "recorded": "v0.5.0 baseline, 23 runs, graded with eval-graders/2",
+  "graderRevision": "eval-graders/7",
+  "note": "Regrading the baseline with eval-graders/7 reproduces every recorded result. The D13b parser correction changes no baseline run: none uses the corrected lead-in form, and S12-r1's lead-in, which ends with a colon, was already supported. This list is deliberately empty, so any difference fails verification.",
+  "deltas": []
+}

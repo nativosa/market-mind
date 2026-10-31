@@ -35,7 +35,7 @@ export const CASES: Case[] = [
 
 /** The result without fields that legitimately change between grader revisions. */
 export function stripRevision(r: EvalResult): Record<string, unknown> {
-  const { contract: _c, graderRevision: _g, execution: _e, ...rest } = r as EvalResult & { execution?: unknown };
+  const { contract: _c, graderRevision: _g, execution: _e, reliability: _r, rubricSet: _s, ...rest } = r as EvalResult & { execution?: unknown };
   return rest;
 }
 

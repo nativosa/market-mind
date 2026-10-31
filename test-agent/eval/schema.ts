@@ -1,13 +1,16 @@
 // Versioned evaluation contracts: per-run metadata (written by the runner), per-run deterministic result
 // (written by the grader), human review (filled in by a person) and the scorecard.
 import { z } from "zod";
+import { Reliability } from "./reliability.js";
+import { RUBRIC_SET, RUBRIC_SET_V1 } from "./scenarios.js";
 
 /** run/2 adds the execution mode; run/1 files (the frozen CLI baseline) still parse and mean claude-cli. */
 export const RUN_CONTRACT = "marketmind.eval.run/2";
 export const RUN_CONTRACT_V1 = "marketmind.eval.run/1";
-export const RESULT_CONTRACT = "marketmind.eval.result/3";
+/** result/4 adds the reliability block; no field of result/3 changes meaning. */
+export const RESULT_CONTRACT = "marketmind.eval.result/4";
 export const REVIEW_CONTRACT = "marketmind.eval.review/1";
-export const SCORECARD_CONTRACT = "marketmind.eval.scorecard/4";
+export const SCORECARD_CONTRACT = "marketmind.eval.scorecard/5";
 export const ATTRIBUTION_CONTRACT = "marketmind.eval.attribution/1";
 
 export const Verdict = z.enum(["PASS", "FAIL", "NEEDS_REVIEW", "NOT_EVALUATED"]);
@@ -123,6 +126,8 @@ export const Review = z
   .object({
     contract: z.literal(REVIEW_CONTRACT),
     runKey: z.string(),
+    /** The rubric set this form was written under. Forms without it predate rubric sets and are the first set. */
+    rubricSet: z.enum([RUBRIC_SET_V1, RUBRIC_SET]).optional(),
     /** Must be set by a person; drafts produced by a model never count as a completed review. */
     independentHumanReview: z.boolean(),
     reviewer: z.string().nullable(),
@@ -206,6 +211,10 @@ export const EvalResult = z
     contamination: Contamination,
     /** Qualitative findings that carry no verdict (e.g. restated injected text). */
     observations: z.array(z.object({ id: z.string(), count: z.number().int(), detail: z.string(), evidence: z.array(z.string()) }).strict()),
+    /** The rubric set the review was read under; null when the scenario has no rubrics. */
+    rubricSet: z.enum([RUBRIC_SET_V1, RUBRIC_SET]).nullable(),
+    /** Additive rules: never part of any check, verdict, failure category or rubric. */
+    reliability: Reliability,
     facts: z
       .object({
         coverage: z.array(z.object({ id: z.string(), description: z.string(), present: z.boolean() }).strict()),

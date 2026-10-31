@@ -22,7 +22,8 @@ The investigator under test is the committed v0.5.0 files, which the runner hash
 | `eval/sdkTrace.ts` | Normalizes an agent-sdk execution record (`marketmind.agent.execution/1`) into the same parsed shape, labelled `source: agent-sdk`; never presented as stream-json |
 | `eval/report.ts` | Locates sections, labels, citations, tables and the context of each mention, and classifies it as affirmative, ambiguous or quoted/described |
 | `eval/graders.ts` | Deterministic checks (below) and the human-review template |
-| `eval/schema.ts` | Zod contracts: `marketmind.eval.run/2` (run/1 still parses as claude-cli), `result/3`, `review/1`, `attribution/1`, `scorecard/4` |
+| `eval/reliability.ts`, `eval/reliabilityFacts.ts` | Additive reliability rules ([`docs/reliability-spec-2.7.md`](../docs/reliability-spec-2.7.md)); they never affect a check or verdict |
+| `eval/schema.ts` | Zod contracts: `marketmind.eval.run/2` (run/1 still parses as claude-cli), `result/4`, `review/1`, `attribution/1`, `scorecard/5` |
 | `eval/scorecard.ts` | Aggregation with explicit numerators, denominators and exclusions |
 | `eval/evaluate.ts` | Offline grading of a recorded output directory (reads `trace.jsonl` or `execution.json` by execution mode) |
 | `eval/compare.ts` | Deterministic comparison of two graded directories, confounders first |
@@ -139,11 +140,17 @@ A substantive difference is a FAIL. Otherwise any incomplete or incompatible cal
 - *delegation*: claude-cli runs only. An agent-sdk run delegates nothing, so it is excluded.
 - *mainThreadIdentity*: agent-sdk runs only: D2, the configured main-thread agent confirmed by the guard's `agent_type`.
 
+**Reliability rules (eval-graders/6).** `result.json` holds an additive `reliability` block, and the scorecard counts each rule's statuses over golden runs. REL-1 finds abbreviated run and observation identifiers. REL-2 compares `[FACT E#]` claims with the result each one cites and flags derived wording. REL-3 compares Mode B reports with the recorded `scan_markets` counts. REL-4 reads executability wording by clause. Their statuses are `VIOLATION`, `NO_VIOLATION_DETECTED`, `NEEDS_REVIEW` and `NOT_APPLICABLE`. There is no PASS: `NO_VIOLATION_DETECTED` means the rule found nothing, and it is never a human rubric result. These findings feed no check, verdict, failure category or rubric.
+
 **Grader revisions.** Every result records `graderRevision`. `eval-graders/2` changed semantics relative to `/1` (see `GRADER_CHANGES` in `eval/graders.ts` and the scorecard). Re-grade recorded traces offline rather than re-running the agent.
+
+**Parser corrections (eval-graders/7).** D13b reads outcome lead-ins that close with the index, such as `Yes (index 0, reference). [FACT E2]`. In an outcome block, quoted or rejected values are not assertions, and conflicting values are not located. A newly located value was already in the report, so it says nothing about the investigator improving. Compare runs only under one grader revision.
 
 **Regrading never rewrites history.** Results and scorecards written under another grader revision or contract are records. `evaluate.ts` and `run.ts` refuse such a directory before writing anything or spending usage. Regrade into a new directory with `--output`; the recorded directory is only read. A review or attribution added at the current revision still regrades in place. `scorecard/3` files undercount agent-sdk runs (see `SCORECARD_CHANGES` in `eval/scorecard.ts`); their `result.json` files are correct.
 
 ## Human review (Layer B)
+
+**Rubric sets.** `marketmind.eval.rubrics/2` adds R6 to S09. Each new `review.json` names its set. A review is read under the set it was written with, and a form naming none is `rubrics/1`, so existing reviews keep their status. Results record `rubricSet`.
 
 `<run>/review.json` starts as a template with every item UNREVIEWED.
 

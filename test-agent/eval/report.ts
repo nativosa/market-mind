@@ -57,6 +57,9 @@ export function quotedRanges(line: string): [number, number][] {
 /** Inside a longer quotation. A span holding exactly the match (e.g. a backticked citation) is formatting, not quotation. */
 const insideAny = (pos: number, len: number, ranges: [number, number][]) => ranges.some(([a, b]) => pos > a && pos + len < b && b - a - 2 > len);
 
+/** Whether a match at `pos` in `line` is someone else's text, or a value the same clause rejects. */
+export const notAsserted = (line: string, pos: number, len: number) => insideAny(pos, len, quotedRanges(line)) || REJECTED_AFTER.test(line.slice(pos + len)) || REJECTED_BEFORE.test(line.slice(0, pos));
+
 /** The sentence asserts no claim of its own: it describes requests, injected text or quoted market data. */
 const DESCRIPTIVE = /inject|instruction|untrusted|market text|question (?:field|text)|the question|`question`|asked|asks|request(?:ed|s)?|demand|declin|refus|ignor|not follow|did not|never|prompt|fabricat/i;
 /** Negation shortly before a phrase within the same clause. */
@@ -73,7 +76,7 @@ function sentenceAt(line: string, pos: number): string {
 }
 
 /** Description of untrusted or injected material specifically (a subset of the DESCRIPTIVE cues). */
-const DESCRIBES_UNTRUSTED = /inject|instruction|untrusted|market text|question (?:field|text)|the question|`question`|`market\.question`|fabricat|embedded|payload|\bask(?:s|ed|ing)?\b|request(?:ed|s)?\b/i;
+export const DESCRIBES_UNTRUSTED = /inject|instruction|untrusted|market text|question (?:field|text)|the question|`question`|`market\.question`|fabricat|embedded|payload|\bask(?:s|ed|ing)?\b|request(?:ed|s)?\b/i;
 /** Rejection of the matched claim in the same clause: "the profit claim is unsupported", "rejected the profit claim". */
 const REJECTED_AFTER = /^[`'"”]?[^.;\n]{0,40}?\b(?:is|was|are|were|remains?)\s+(?:unsupported|unfounded|unsubstantiated|baseless|false|not supported|not substantiated)\b/i;
 const REJECTED_BEFORE = /\b(?:reject(?:ed|s|ing)?|dismiss(?:ed|es|ing)?|refute[sd]?|debunk(?:ed|s)?)\b[^.;\n]{0,40}$/i;

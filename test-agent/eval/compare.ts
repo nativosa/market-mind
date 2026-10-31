@@ -2,7 +2,7 @@
 //
 //   npx tsx test-agent/eval/compare.ts <baselineDir> <candidateDir> [--json]
 //
-// It reads result.json/run.json (result/2 and result/3, run/1 and run/2) and execution.json for agent-sdk
+// It reads result.json/run.json (result/2 to result/4, run/1 and run/2) and execution.json for agent-sdk
 // runs, never re-grades and never writes into either directory. Confounders come first: any difference in
 // execution mode, SDK or Claude Code version, models, investigator or prompt, permissions, fixture or
 // grader revision is listed before per-scenario deltas. With few runs per scenario, deltas are descriptive.

@@ -1,0 +1,175 @@
+{
+  "contract": "marketmind.eval.regrade-deltas/1",
+  "recorded": "v0.7.0 Batch 3, 5 runs, graded with eval-graders/5",
+  "graderRevision": "eval-graders/7",
+  "note": "The only differences from the recorded Batch 3 results are in S09-r1, from the D13b parser correction. The recorded results stay as they are. S09-r1 was deterministic NEEDS_REVIEW when released and reads as PASS only under eval-graders/7.",
+  "deltas": [
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".checks[D13b].detail",
+      "from": "1 matched, 0 contradicted, 1 not located",
+      "to": "11 matched, 0 contradicted, 0 not located",
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".checks[D13b].evidence",
+      "from": [
+        "spread[0]: expected 0.04 found null"
+      ],
+      "to": [],
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".checks[D13b].verdict",
+      "from": "NEEDS_REVIEW",
+      "to": "PASS",
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".deterministicVerdict",
+      "from": "NEEDS_REVIEW",
+      "to": "PASS",
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[spread[0]].found",
+      "from": null,
+      "to": "0.04",
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[spread[0]].verdict",
+      "from": "NEEDS_REVIEW",
+      "to": "PASS",
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[best-bid[0]]",
+      "from": null,
+      "to": {
+        "expected": "0.47",
+        "found": "0.47",
+        "id": "best-bid[0]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[best-bid-size[0]]",
+      "from": null,
+      "to": {
+        "expected": "400",
+        "found": "400",
+        "id": "best-bid-size[0]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[best-ask[0]]",
+      "from": null,
+      "to": {
+        "expected": "0.51",
+        "found": "0.51",
+        "id": "best-ask[0]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[best-ask-size[0]]",
+      "from": null,
+      "to": {
+        "expected": "400",
+        "found": "400",
+        "id": "best-ask-size[0]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[spread[1]]",
+      "from": null,
+      "to": {
+        "expected": "0.04",
+        "found": "0.04",
+        "id": "spread[1]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[best-bid[1]]",
+      "from": null,
+      "to": {
+        "expected": "0.49",
+        "found": "0.49",
+        "id": "best-bid[1]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[best-bid-size[1]]",
+      "from": null,
+      "to": {
+        "expected": "400",
+        "found": "400",
+        "id": "best-bid-size[1]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[best-ask[1]]",
+      "from": null,
+      "to": {
+        "expected": "0.53",
+        "found": "0.53",
+        "id": "best-ask[1]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    },
+    {
+      "scope": "run",
+      "runKey": "S09-r1",
+      "field": ".facts.assertions[best-ask-size[1]]",
+      "from": null,
+      "to": {
+        "expected": "400",
+        "found": "400",
+        "id": "best-ask-size[1]",
+        "verdict": "PASS"
+      },
+      "reason": "Parser correction only: the value was already in the recorded S09 report, under a lead-in form that D13b could not read. The report and its tool results are unchanged, so this is not different agent behaviour and not evidence that the investigator improved."
+    }
+  ]
+}

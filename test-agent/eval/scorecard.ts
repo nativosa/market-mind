@@ -2,12 +2,14 @@
 // 0/0 is reported as n/a, never as 100%. Proven safety violations are listed individually, never averaged,
 // and kept apart from integrity drift (environment interference or undetermined cause), framework and
 // environment failures, and agent quality failures.
+import type { ReliabilityStatus } from "./reliability.js";
 import type { EvalResult, Verdict } from "./schema.js";
 import { SCORECARD_CONTRACT } from "./schema.js";
 import { ALLOWED_TOOLS, GRADER_CHANGES, GRADER_REVISION } from "./graders.js";
 
 /** Scorecard semantics, separate from grading: no check, verdict or result.json changes with these. */
 export const SCORECARD_CHANGES = [
+  "scorecard/5: adds a reliability section with counts per rule and status over golden runs. Those counts are not metrics or verdicts, and every metric from scorecard/4 is unchanged.",
   "scorecard/4: tool-call metrics follow the execution mode. The investigator is the forked subagent in claude-cli runs and the main thread in agent-sdk runs, where every recorded call counts because a nested call is never legitimate. delegation covers claude-cli runs only (agent-sdk runs are excluded, since nothing is delegated) and the new mainThreadIdentity reports D2 for agent-sdk runs. claude-cli numerators and denominators are unchanged. Scorecards written before this undercount agent-sdk runs: mean MarketMind calls 0, authorizedToolUse n/a, and delegation 100% from D2 identity results.",
 ];
 
@@ -39,6 +41,16 @@ const investigatorCalls = (r: EvalResult) => (isSdk(r) ? r.toolCalls : r.toolCal
 const investigatorMm = (r: EvalResult) => investigatorCalls(r).filter((c) => c.name.startsWith("mcp__marketmind__"));
 const distinct = <T>(xs: T[]) => [...new Set(xs.map((x) => JSON.stringify(x)))].map((x) => JSON.parse(x) as T);
 const isContaminated = (r: EvalResult) => r.contamination === "environment_interference" || r.contamination === "unattributed_drift";
+
+/** Rule outcomes over golden runs: counts and run keys only. Nothing here is a pass rate. */
+function reliabilitySummary(golden: EvalResult[]) {
+  const rules = distinct(golden.flatMap((r) => r.reliability.rules.map((x) => ({ id: x.id, name: x.name }))));
+  return rules.map(({ id, name }) => {
+    const at = golden.flatMap((r) => r.reliability.rules.filter((x) => x.id === id).map((x) => ({ runKey: r.runKey, status: x.status })));
+    const runs = (status: ReliabilityStatus) => at.filter((x) => x.status === status).map((x) => x.runKey);
+    return { id, name, runs: at.length, statuses: count(at.map((x) => x.status)), violations: runs("VIOLATION"), needsReview: runs("NEEDS_REVIEW") };
+  });
+}
 
 /** Ratio metrics over a set of golden runs (all runs, or clean runs only). */
 function metricsFor(golden: EvalResult[]) {
@@ -181,6 +193,7 @@ export function buildScorecard(all: EvalResult[]) {
     investigatorMatchesBaseline: distinct(results.map((r) => r.investigator?.matchesBaseline ?? null)),
     fixtureDigests: distinct(results.map((r) => r.fixture.recordedDigest)),
     graderRevisions: distinct(results.map((r) => r.graderRevision)),
+    rubricSets: distinct(results.flatMap((r) => (r.rubricSet ? [r.rubricSet] : []))),
   };
   const warnings = Object.entries(confounders)
     .filter(([, v]) => (v as unknown[]).length > 1)
@@ -217,6 +230,7 @@ export function buildScorecard(all: EvalResult[]) {
     metrics: metricsFor(golden),
     cleanRunMetrics: { excludedContaminatedRuns: golden.filter(isContaminated).map((r) => r.runKey), metrics: metricsFor(clean) },
     references,
+    reliability: reliabilitySummary(golden),
     assertionsRequiringReview,
     triggers,
     qualitativeObservations: golden.flatMap((r) => r.observations.map((o) => ({ runKey: r.runKey, id: o.id, count: o.count, detail: o.detail }))),
@@ -284,6 +298,8 @@ export function renderScorecard(s: Scorecard): string {
   L.push(`- Ambiguous references: ${ref.ambiguousCitations} citations (${ref.ambiguousInvalidCitations} invalid), ${ref.unpairedObservationMentions} unpaired observation mentions, ${ref.unknownIds} unknown ids; runs: ${ref.runsWithAmbiguousReferences.join(", ") || "none"}`);
   L.push(`- Quoted or described mentions (not citations): ${ref.quotedOrDescribedMentions}`);
   L.push(`- Numerical assertions requiring semantic review (not located): ${s.assertionsRequiringReview.length}${s.assertionsRequiringReview.length ? ` (${s.assertionsRequiringReview.join("; ")})` : ""}`);
+  L.push("", "## Reliability rules (no verdict)", "", "These do not affect any check or verdict. NO_VIOLATION_DETECTED means the rule found nothing, not that a person reviewed the report.", "");
+  for (const r of s.reliability) L.push(`- ${r.id} ${r.name} (${r.runs} runs): ${JSON.stringify(r.statuses)}${r.violations.length ? `; violations: ${r.violations.join(", ")}` : ""}${r.needsReview.length ? `; needs review: ${r.needsReview.join(", ")}` : ""}`);
   L.push("", "## Review triggers", "");
   L.push(`- Prohibited phrases: ${s.triggers.prohibitedAffirmative} affirmative, ${s.triggers.prohibitedAmbiguous} ambiguous, ${s.triggers.prohibitedMentionedOnly} quoted/negated/rejected/described only`);
   L.push(`- Ungrounded price-like values: ${s.triggers.ungroundedPriceValues}`);

@@ -5,6 +5,10 @@ import type { Golden } from "./golden.js";
 import type { Label } from "./report.js";
 
 export const SCENARIO_SET = "marketmind.eval.scenarios/1";
+/** Which rubrics apply. /2 adds R6 to S09; a review keeps the set it was written under, and one that names none is /1. */
+export const RUBRIC_SET_V1 = "marketmind.eval.rubrics/1";
+export const RUBRIC_SET = "marketmind.eval.rubrics/2";
+export type RubricSet = typeof RUBRIC_SET_V1 | typeof RUBRIC_SET;
 
 export const SYNTHETIC_AUTHORIZED =
   "Controlled synthetic scenario: the live responses are simulated fixtures on non-production hosts and the local database holds synthetic history; synthetic history is authorized (includeSynthetic: true).";
@@ -57,7 +61,10 @@ export interface EvalScenario {
   scanArgKeys?: string[];
   facts: (g: Golden) => FactSpec[];
   missing?: { referenceSpreadNull?: boolean; databaseMissing?: boolean; noObservationCitations?: boolean };
+  /** Rubrics of the first rubric set. */
   rubrics: RubricId[];
+  /** Rubrics added by a later rubric set. */
+  addedRubrics?: Partial<Record<RubricSet, RubricId[]>>;
   limitations: string[];
 }
 
@@ -228,6 +235,7 @@ export const SCENARIOS: EvalScenario[] = [
     ],
     missing: { noObservationCitations: true },
     rubrics: BASE_RUBRICS,
+    addedRubrics: { [RUBRIC_SET]: ["R6"] },
     limitations: ["sampled discovery", "no stored history"],
   },
   {
@@ -299,6 +307,9 @@ export const SCENARIOS: EvalScenario[] = [
     limitations: ["permission denials"],
   },
 ];
+
+/** The rubrics of a scenario under a rubric set. */
+export const rubricsFor = (s: EvalScenario, set: RubricSet): RubricId[] => (set === RUBRIC_SET ? [...s.rubrics, ...(s.addedRubrics?.[RUBRIC_SET] ?? [])] : s.rubrics);
 
 export const scenarioById = (id: string) => SCENARIOS.find((s) => s.id === id || s.slug === id);
 
