@@ -2,6 +2,7 @@
 // prints with --json; the execution record is the normalized, provenance-tagged view of the SDK message
 // stream that the evaluation framework grades. Neither pretends to be a Claude Code stream-json trace.
 import { z } from "zod";
+import { PolicyVersion } from "./policy.js";
 
 export const INVESTIGATION_CONTRACT = "marketmind.agent.investigation/1";
 export const EXECUTION_CONTRACT = "marketmind.agent.execution/1";
@@ -198,7 +199,8 @@ export const ExecutionRecord = z
     contract: z.literal(EXECUTION_CONTRACT),
     source: z.literal(EXECUTION_SOURCE),
     harness: Harness,
-    investigator: z.object({ agentSha256: sha, skillSha256: sha, settingsSha256: sha, promptSha256: sha }).strict(),
+    /** policyVersion is absent in records from before the policy registry. */
+    investigator: z.object({ agentSha256: sha, skillSha256: sha, settingsSha256: sha, promptSha256: sha, policyVersion: PolicyVersion.optional() }).strict(),
     status: SessionStatus,
     statusDetail: z.string(),
     preflight: Preflight.nullable(),

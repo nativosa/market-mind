@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { policyVersionOf } from "../agent-sdk/policy.js";
 import type { RunMeta } from "./eval/schema.js";
 
 export const REPO = fileURLToPath(new URL("..", import.meta.url));
@@ -39,10 +40,10 @@ export function investigator(): RunMeta["investigator"] {
   const base = files.map(baseline);
   const head = git("rev-parse", "HEAD");
   const dirty = git("diff", "--quiet", "HEAD", "--", ...files);
+  const hashes = { agentSha256: hash(INVESTIGATOR_FILES.agent), skillSha256: hash(INVESTIGATOR_FILES.skill), settingsSha256: hash(INVESTIGATOR_FILES.settings) };
   return {
-    agentSha256: hash(INVESTIGATOR_FILES.agent),
-    skillSha256: hash(INVESTIGATOR_FILES.skill),
-    settingsSha256: hash(INVESTIGATOR_FILES.settings),
+    ...hashes,
+    policyVersion: policyVersionOf(hashes),
     baselineTag: BASELINE_TAG,
     matchesBaseline: base.some((b) => b === null) ? null : files.every((f, i) => hash(f) === base[i]),
     gitCommit: head.status === 0 ? head.stdout.trim() : null,

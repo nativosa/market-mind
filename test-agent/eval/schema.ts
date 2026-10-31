@@ -1,6 +1,7 @@
 // Versioned evaluation contracts: per-run metadata (written by the runner), per-run deterministic result
 // (written by the grader), human review (filled in by a person) and the scorecard.
 import { z } from "zod";
+import { PolicyVersion } from "../../agent-sdk/policy.js";
 import { Reliability } from "./reliability.js";
 import { RUBRIC_SET, RUBRIC_SET_V1 } from "./scenarios.js";
 
@@ -27,6 +28,8 @@ export const Investigator = z
     agentSha256: sha,
     skillSha256: sha,
     settingsSha256: sha,
+    /** Absent in runs from before the policy registry: identity is never added to old records. */
+    policyVersion: PolicyVersion.optional(),
     baselineTag: z.string(),
     matchesBaseline: z.boolean().nullable(),
     gitCommit: z.string().nullable(),

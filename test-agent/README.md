@@ -150,6 +150,8 @@ A substantive difference is a FAIL. Otherwise any incomplete or incompatible cal
 
 ## Human review (Layer B)
 
+**Policy identity.** New `run.json`, result and execution records name `investigator.policyVersion`: `policy-v1`, `policy-v2` or `unregistered`, from the exact hashes in `agent-sdk/policy.ts`. Older records stay as written. The SDK harness refuses an unregistered policy. The CLI harness runs it and records `unregistered`, so read that value before comparing runs. `matchesBaseline` still compares with v0.5.0, so it is `false` for `policy-v2` and the scorecard warns about it. That warning is expected, and it is a confounder in any comparison with the baseline.
+
 **Rubric sets.** `marketmind.eval.rubrics/2` adds R6 to S09. Each new `review.json` names its set. A review is read under the set it was written with, and a form naming none is `rubrics/1`, so existing reviews keep their status. Results record `rubricSet`.
 
 `<run>/review.json` starts as a template with every item UNREVIEWED.

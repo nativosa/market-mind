@@ -24,6 +24,7 @@ import { EXECUTION_CONTRACT, INVESTIGATION_CONTRACT, LauncherReport, type Cleanu
 import { Recorder, type Progress } from "./events.js";
 import { createGuard, MARKETMIND_TOOLS, MCP_SERVER } from "./guard.js";
 import { sha256, type Investigator } from "./investigator.js";
+import { policyVersionOf } from "./policy.js";
 import { buildOptions, describeOptions, harnessOf, MCP_LAUNCHER, serverSpec, SESSION_SETTINGS, stableStringify, type Isolation, type ServerSpec } from "./options.js";
 import { Redactor } from "./redact.js";
 
@@ -149,6 +150,7 @@ export async function runInvestigation(cfg: SessionConfig, deps: SessionDeps): P
   const recorder = new Recorder();
   const guard = createGuard({ mode: cfg.request.mode, syntheticAuthorized: cfg.request.syntheticAuthorized, agentName: cfg.investigator.name });
   const prompt = cfg.investigator.renderPrompt(cfg.request.arguments);
+  const policyVersion = policyVersionOf(cfg.investigator.hashes);
   const messages: unknown[] = [];
   const cleanup: Cleanup = { closeCalled: false, childExited: null, forcedKill: false, orphansFound: 0, orphansKilled: 0, tempRemoved: false, problems: [] };
   let stderr = "";
@@ -179,6 +181,8 @@ export async function runInvestigation(cfg: SessionConfig, deps: SessionDeps): P
 
   if (!deps.parentEnv.ANTHROPIC_API_KEY) {
     finish("missing_credentials", "ANTHROPIC_API_KEY is not set; the SDK application never uses Claude Code login credentials");
+  } else if (policyVersion === "unregistered") {
+    finish("invalid_options", "the investigator policy files match no registered policy (agent-sdk/policy.ts); nothing was started");
   } else {
     let timer: unknown = null;
     try {
@@ -351,7 +355,7 @@ export async function runInvestigation(cfg: SessionConfig, deps: SessionDeps): P
   const parsed = parseReport(report);
   const described = options && server ? describeOptions(options, { investigator: cfg.investigator, server, timeoutMs: cfg.timeoutMs }) : {};
   const harness = harnessOf(options ?? ({}), described, { investigator: cfg.investigator, timeoutMs: cfg.timeoutMs });
-  const investigatorHashes = { ...cfg.investigator.hashes, promptSha256: sha256(prompt) };
+  const investigatorHashes = { ...cfg.investigator.hashes, promptSha256: sha256(prompt), policyVersion };
   const calls = [...recorder.calls.values()];
   const record: ExecutionRecord = {
     contract: EXECUTION_CONTRACT,

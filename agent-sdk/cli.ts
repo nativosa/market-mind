@@ -20,6 +20,7 @@ import { DEFAULT_DB_PATH } from "../src/config/config.js";
 import { parseArgs, UsageError, type CliArgs } from "./args.js";
 import { createGuard } from "./guard.js";
 import { loadInvestigator, REPO_ROOT, type Investigator } from "./investigator.js";
+import { policyVersionOf } from "./policy.js";
 import { buildOptions, describeOptions, harnessOf, serverSpec, stableStringify } from "./options.js";
 import { Redactor } from "./redact.js";
 import { optionViolations, runInvestigation, type QueryFn, type SessionDeps, type SessionOutcome } from "./session.js";
@@ -44,7 +45,7 @@ export function dryRun(args: CliArgs, investigator: Investigator, env: Record<st
     harness: harnessOf(options, described, { investigator, timeoutMs: args.timeoutMs }),
     options: described,
     optionViolations: optionViolations(options),
-    investigator: { ...investigator.hashes, promptSha256: sha256(prompt), ignoredFrontmatter: investigator.ignoredFrontmatter },
+    investigator: { ...investigator.hashes, promptSha256: sha256(prompt), policyVersion: policyVersionOf(investigator.hashes), ignoredFrontmatter: investigator.ignoredFrontmatter },
     credentials: { ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY ? "set (value not shown)" : "not set (required for a real run)" },
     wouldSpawn: false,
     note: "Dry run: the SDK runtime was not loaded, nothing was spawned and no API request was made.",

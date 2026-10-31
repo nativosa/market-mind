@@ -122,6 +122,7 @@ There is exactly one policy source: `.claude/agents/market-investigator.md` and 
 - `omitClaudeMd` has no effect on a main-thread agent. It is recorded as ignored, and isolation relies on `settingSources: []` and the temp `cwd` instead.
 - The task prompt is the skill body with `$ARGUMENTS` substituted.
 - Every result records the agent, skill and settings SHA-256s, the rendered prompt's SHA-256 and an options digest.
+- `agent-sdk/policy.ts` lists the reviewed policies by the exact hashes of all three files. `policy-v1` is the investigator of v0.5.0 to v0.7.0, and `policy-v2` is the Stage 2.7 revision. Any other combination is `unregistered`, and a real run refuses it before anything starts. New records name their `policyVersion`; older records keep only their hashes. There is no option to load policy files from elsewhere.
 
 **Harness difference from the v0.5.0 baseline (by design):** there is no forked skill and no Opus main session; the investigator itself is the main thread. Comparisons always list this as a confounder.
 
