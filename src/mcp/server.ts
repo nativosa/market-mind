@@ -23,18 +23,23 @@ export interface McpDeps {
   maxResultChars: number;
   /** Deadline signal factory, injectable for tests. Defaults to AbortSignal.timeout. */
   deadline?: (ms: number) => AbortSignal;
+  /** No synthetic stored data, whatever a tool call asks for (MARKETMIND_LIVE_ONLY=1). */
+  liveOnly?: boolean;
 }
 
-/** Configuration from the environment: the CLI's settings plus the process-wide live request ceiling. */
-export function mcpSettings(env: Record<string, string | undefined>): { config: AppConfig; processRequestLimit: number } {
+/** Configuration from the environment: the CLI's settings, the process-wide live request ceiling and live-only mode. */
+export function mcpSettings(env: Record<string, string | undefined>): { config: AppConfig; processRequestLimit: number; liveOnly: boolean } {
   const config = loadConfig(env);
+  const only = env.MARKETMIND_LIVE_ONLY;
+  if (only !== undefined && only !== "1") throw new MarketMindError("Usage", "Invalid MARKETMIND_LIVE_ONLY", { issues: ["must be 1 when set"] });
+  const liveOnly = only === "1";
   const raw = env.MARKETMIND_MCP_MAX_REQUESTS;
-  if (raw === undefined) return { config, processRequestLimit: MCP_LIMITS.processRequests.default };
+  if (raw === undefined) return { config, processRequestLimit: MCP_LIMITS.processRequests.default, liveOnly };
   const parsed = z.coerce.number().int().min(1).max(MCP_LIMITS.processRequests.max).safeParse(raw);
   if (!parsed.success) {
     throw new MarketMindError("Usage", "Invalid MARKETMIND_MCP_MAX_REQUESTS", { issues: [`must be an integer from 1 to ${MCP_LIMITS.processRequests.max}`] });
   }
-  return { config, processRequestLimit: parsed.data };
+  return { config, processRequestLimit: parsed.data, liveOnly };
 }
 
 export const SERVER_INSTRUCTIONS =

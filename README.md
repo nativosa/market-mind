@@ -100,6 +100,7 @@ Optional environment overrides, all validated:
 - `MARKETMIND_DB`: database path (`.sqlite`/`.db`; default `data/marketmind.sqlite`)
 - `MARKETMIND_BUILD_ID`: optional build identifier stored with every run, e.g. `MARKETMIND_BUILD_ID=$(git rev-parse HEAD)`. MarketMind never calls Git at runtime.
 - `MARKETMIND_MCP_MAX_REQUESTS`: live HTTP attempts allowed per MCP server process (1–1000, default 200)
+- `MARKETMIND_LIVE_ONLY`: set to `1` to hide synthetic runs and observations from the MCP stored tools, whatever a call asks for (unset by default)
 
 ## How it works
 

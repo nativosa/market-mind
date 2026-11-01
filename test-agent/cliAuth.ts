@@ -288,8 +288,8 @@ export class StreamWatch {
 }
 
 /** MCP config for one run. The server starts through the launcher, which rebuilds its environment, so no credential reaches it. */
-export function mcpConfig(launcher: string, serverScript: string, tag: string, db: string, launchReport: string): { mcpServers: Record<string, unknown> } {
-  return { mcpServers: { marketmind: { type: "stdio", command: process.execPath, args: [launcher, serverScript, `--eval-tag=${tag}`], env: { MARKETMIND_DB: db, MARKETMIND_LAUNCH_REPORT: launchReport } } } };
+export function mcpConfig(launcher: string, serverScript: string, tag: string, db: string, launchReport: string, serverSettings: Record<string, string> = {}): { mcpServers: Record<string, unknown> } {
+  return { mcpServers: { marketmind: { type: "stdio", command: process.execPath, args: [launcher, serverScript, `--eval-tag=${tag}`], env: { ...serverSettings, MARKETMIND_DB: db, MARKETMIND_LAUNCH_REPORT: launchReport } } } };
 }
 
 /** Why a launcher report shows a credential or an unexpected variable reaching the server. */

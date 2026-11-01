@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 /** Platform variables Node needs to start and resolve paths; none carries a credential. */
 export const PLATFORM_KEYS = ["PATH", "Path", "PATHEXT", "SystemRoot", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP", "TMPDIR"];
 /** Every variable the MarketMind servers read (src/config, src/mcp/main.ts, test-agent/scenarioServer.ts). */
-export const MARKETMIND_KEYS = ["MARKETMIND_DB", "MARKETMIND_GAMMA_URL", "MARKETMIND_CLOB_URL", "MARKETMIND_TIMEOUT_MS", "MARKETMIND_MAX_RETRIES", "MARKETMIND_MCP_MAX_REQUESTS", "MARKETMIND_BUILD_ID"];
+export const MARKETMIND_KEYS = ["MARKETMIND_DB", "MARKETMIND_GAMMA_URL", "MARKETMIND_CLOB_URL", "MARKETMIND_TIMEOUT_MS", "MARKETMIND_MAX_RETRIES", "MARKETMIND_MCP_MAX_REQUESTS", "MARKETMIND_LIVE_ONLY", "MARKETMIND_BUILD_ID"];
 export const SERVER_ENV_KEYS = [...PLATFORM_KEYS, ...MARKETMIND_KEYS];
 
 /** The server environment: exact allowlisted names only, non-empty string values only. */

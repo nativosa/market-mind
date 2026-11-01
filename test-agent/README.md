@@ -29,6 +29,7 @@ The investigator under test is the committed v0.5.0 files, which the runner hash
 | `eval/compare.ts` | Deterministic comparison of two graded directories, confounders first |
 | `eval/baselineArchive.ts` | Verifies the preserved v0.5.0 baseline against its committed manifest, then regrades it into a temporary directory |
 | `run.ts` | The real-agent runner (`--harness cli` default, or `--harness sdk`) |
+| `live.ts` | One bounded investigation of one real market on a Claude subscription. A demonstration, not part of the evaluation (see "Live investigation") |
 | `cliAuth.ts` | Explicit authentication and the tool boundary for the CLI harness: environment, flags, pre-run gate and stream checks |
 | `sdkRun.ts` | One agent-sdk run in the evaluation layout |
 | `processes.ts` | Shared hashing and process-tree cleanup helpers |
@@ -242,3 +243,37 @@ Runs recorded before this change had 31 tools in the main session pool. They are
 - Costs are Claude Code's list-price estimates (`costBasis`), not billing.
 - Elevated parent permission modes (`bypassPermissions`, `auto`, `acceptEdits`) are **not** evaluated. They need an isolated, disposable environment.
 - **Re-grading the v0.5.0 baseline under v0.6.0 with eval-graders/2 or /3 fails D9** on the envelope `appVersion` alone (0.5.0 recorded, 0.6.0 replayed). eval-graders/4 fixes this (see above); the recorded baseline results are unchanged.
+
+## Live investigation
+
+`live.ts` investigates one real, open market with live public data. It is a demonstration, separate from the evaluation: it uses no scenario, fixture or synthetic database, it is never graded, and its output never enters `.eval-out/`.
+
+```bash
+npx tsx test-agent/live.ts --auth subscription --market-id <gammaId> --max-budget-usd 0.40 --out .live-out/<name> --check   # no model request
+npx tsx test-agent/live.ts --auth subscription --market-id <gammaId> --max-budget-usd 0.40 --out .live-out/<name>
+```
+
+A real run uses model quota, needs a committed, clean tree, and should run with extra usage off. `--out` must be a new directory directly under `.live-out/`, which is gitignored.
+
+**What it shares with the CLI harness:** the authentication gate, the environment, the five-tool flags, the stream watch and the launcher (`cliAuth.ts`). Subscription is the only mode, with no fallback.
+
+**What is different:** the server is the real `bin/marketmind-mcp.mjs`, with two settings the server enforces whatever the model calls:
+
+| Setting | Effect |
+|---|---|
+| `MARKETMIND_MCP_MAX_REQUESTS=16` | At most 16 HTTP attempts in the process, across all tools and retries. The runner stops a session if a second server starts, because that would have its own ceiling |
+| `MARKETMIND_LIVE_ONLY=1` | `includeSynthetic: true` is refused, a synthetic observation reads as not found, and synthetic runs are left out of the run list |
+
+There is deliberately no `--objective`: free text is the only way the skill can authorize synthetic history.
+
+**History.** The stored tools read `data/marketmind.sqlite` if it exists and never create it. With no database the investigator reports history as unknown. Nothing is collected automatically.
+
+**Checks after the session (`liveProblems`).** Every result must come from the current build, with `source: "live"` or `stored`, and only the two production hosts over HTTPS. The fixture server labels its results `live` too, so the host check is what separates them. Calls must be within the five tools, on the given market, with no main-session call, scan, unexplained repeat or synthetic request. A failed check is shown at the top of `report.md` and gives exit code 1. These checks establish where the evidence came from and that the report is well formed. They do not establish that it is accurate.
+
+| File in `.live-out/<name>/` | Contents |
+|---|---|
+| `report.md` | A generated summary of the run and the evidence by source, then the investigator's report, redacted but otherwise unedited |
+| `run.json` | `marketmind.live-run/1`: market, model, authentication fields, versions, policy, commit, tool and request counts, estimated usage, integrity, checks |
+| `trace.jsonl`, `stderr.txt` | The raw session. These hold local paths and session ids, so never publish them |
+
+The CLI has no per-call guard, so the call budget and repeats are checked after the session. Only the request ceiling and the tool boundary are enforced during it.

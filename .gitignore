@@ -25,6 +25,9 @@ data/
 # Agent evaluation artifacts (raw traces contain local paths and session ids; never commit)
 .eval-out/
 
+# Live investigation artifacts (raw traces contain local paths and session ids; never commit)
+.live-out/
+
 # Logs
 *.log
 npm-debug.log*

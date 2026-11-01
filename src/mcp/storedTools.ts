@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { collectionRuns, marketHistory, observationDetails } from "../app/marketHistory.js";
 import { decimal } from "../domain/decimal.js";
-import { isMarketMindError } from "../domain/errors.js";
+import { isMarketMindError, MarketMindError } from "../domain/errors.js";
 import { DetailsInput, DetailsOutput, HistoryInput, HistoryOutput, RunsInput, RunsOutput } from "./contracts.js";
 import { fitted, success } from "./results.js";
 import { handle, type McpDeps } from "./server.js";
@@ -14,6 +14,7 @@ const utc = (iso: string | undefined) => (iso === undefined ? null : new Date(is
 /**
  * Offline tools: a read-only open of the configured database (never created, never migrated),
  * no HTTP dependencies at all. The database path comes from configuration, never from arguments.
+ * With deps.liveOnly, synthetic runs and observations do not exist as far as these tools can show.
  */
 export function registerStoredTools(server: McpServer, deps: McpDeps): void {
   const dbPath = deps.config.dbPath;
@@ -31,7 +32,8 @@ export function registerStoredTools(server: McpServer, deps: McpDeps): void {
     },
     (input) =>
       handle("list_collection_runs", deps, () => {
-        const result = collectionRuns({ dbPath, limit: input.limit + 1, liveness: deps.liveness, now: deps.now });
+        const all = collectionRuns({ dbPath, limit: input.limit + 1, liveness: deps.liveness, now: deps.now });
+        const result = deps.liveOnly ? { ...all, runs: all.runs.filter((r) => r.sourceType === "live") } : all;
         const now = deps.now();
         const host = deps.liveness.hostname();
         return fitted(
@@ -60,6 +62,7 @@ export function registerStoredTools(server: McpServer, deps: McpDeps): void {
     },
     (input) =>
       handle("get_market_history", deps, () => {
+        if (deps.liveOnly && input.includeSynthetic) throw new MarketMindError("Usage", "Synthetic data is disabled on this server");
         const query: HistoryQueryView = {
           marketId: input.marketId,
           asOf: utc(input.asOf),
@@ -114,6 +117,7 @@ export function registerStoredTools(server: McpServer, deps: McpDeps): void {
     (input) =>
       handle("get_observation_details", deps, () => {
         const result = observationDetails({ dbPath, observationId: input.observationId, asOf: utc(input.asOf) });
+        if (deps.liveOnly && result.run.sourceType !== "live") throw new MarketMindError("NotFound", `No live observation ${input.observationId}`, { code: "OBSERVATION_NOT_FOUND" });
         const now = deps.now();
         return fitted(
           input.levels,

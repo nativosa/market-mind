@@ -4,7 +4,7 @@
 //
 //   node test/stubApi.mjs <logFile> <portFile> <scriptJson>
 //
-// scriptJson: { "main": [{ "name", "input" }...], "investigator": [...] }, one tool call per turn, then text.
+// scriptJson: { "main": [{ "name", "input" }...], "investigator": [...], "report": "text" }, one tool call per turn, then text.
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 
@@ -44,7 +44,7 @@ const server = createServer((req, res) => {
     appendFileSync(logFile, `${JSON.stringify({ session, model: request.model, tools: (request.tools ?? []).map((t) => t.name) })}\n`);
     const step = (script[session] ?? [])[turns[session]++];
     if (step) reply(res, request.model, { type: "tool_use", id: `toolu_${++id}`, name: step.name, input: step.input ?? {} }, "tool_use");
-    else reply(res, request.model, { type: "text", text: `stub report (${session})` }, "end_turn");
+    else reply(res, request.model, { type: "text", text: script.report ?? `stub report (${session})` }, "end_turn");
   });
 });
 server.listen(0, "127.0.0.1", () => writeFileSync(portFile, String(server.address().port)));
