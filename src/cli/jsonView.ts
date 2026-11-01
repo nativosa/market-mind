@@ -229,6 +229,7 @@ export function collectJson(result: CollectResult) {
       invariant: "selected = persistedObservations + persistenceFailures + persistenceFailuresUnrecorded",
       failures: result.failures,
     },
+    ...(result.target ? { target: result.target } : {}),
     recovery: result.recovery,
     storage: {
       footprintBefore: result.footprintBefore,

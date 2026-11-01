@@ -42,10 +42,12 @@ export interface ScanCommand {
 }
 
 export const COLLECT_DEFAULTS = { maxDbMb: 1024 } as const;
+/** One target: Gamma, association and two books, each with one retry at most (the scan retry cap). */
+export const TARGET_REQUESTS = { min: 4, max: 8 } as const;
 export const HISTORY_DEFAULTS = { limit: 20, maxLimit: 500, spreadThreshold: "0.02" } as const;
 export const RUNS_DEFAULTS = { limit: 10, maxLimit: 100 } as const;
 
-export type CollectCommand = Omit<ScanCommand, "kind"> & { kind: "collect"; db: string | null; maxDbMb: number };
+export type CollectCommand = Omit<ScanCommand, "kind"> & { kind: "collect"; db: string | null; maxDbMb: number; targetMarketId: string | null };
 
 export interface HistoryCommand {
   kind: "history";
@@ -86,6 +88,8 @@ export const USAGE = `Usage:
                       [--depth-band <0..1|none>] [--max-requests 1..${SCAN_LIMITS.maxRequests}]
                       [--concurrency 1..${SCAN_LIMITS.concurrency}] [--max-duration-ms ${SCAN_LIMITS.minDurationMs}..${SCAN_LIMITS.maxDurationMs}] [--json]
   npm run cli -- collect [scan options] [--db <path.sqlite>] [--max-db-mb 1..${MAX_DB_MB_LIMIT}] [--json]
+  npm run cli -- collect --market-id <gamma id> [--max-requests ${TARGET_REQUESTS.min}..${TARGET_REQUESTS.max}] [--version v1|v2] [--depth-band <0..1|none>]
+                         [--max-duration-ms ${SCAN_LIMITS.minDurationMs}..${SCAN_LIMITS.maxDurationMs}] [--db <path.sqlite>] [--max-db-mb 1..${MAX_DB_MB_LIMIT}] [--json]
   npm run cli -- history --market-id <gamma id> [--as-of <ISO-8601>] [--limit 1..${HISTORY_DEFAULTS.maxLimit}]
                          [--spread-threshold <0..1>] [--analytics-version <n>] [--include-synthetic] [--db <path>] [--json]
   npm run cli -- runs [--limit 1..${RUNS_DEFAULTS.maxLimit}] [--db <path>] [--json]
@@ -125,6 +129,9 @@ const OPTIONS = {
   "include-synthetic": { type: "boolean" },
 } as const;
 
+/** Options that choose or rank markets, which mean nothing for one named market. */
+const DISCOVERY_ONLY = ["discover-order", "max-markets", "top", "page-size", "max-pages", "min-spread", "min-top-size", "include-suspicious", "concurrency"] as const;
+
 const SCAN_OPTIONS = [
   "version",
   "depth-band",
@@ -146,7 +153,7 @@ const ALLOWED: Record<string, readonly string[]> = {
   markets: ["limit", "version", "cursor"],
   inspect: ["market-id", "levels", "depth-band"],
   scan: SCAN_OPTIONS,
-  collect: [...SCAN_OPTIONS, "db", "max-db-mb"],
+  collect: [...SCAN_OPTIONS, "market-id", "db", "max-db-mb"],
   history: ["market-id", "as-of", "limit", "spread-threshold", "analytics-version", "include-synthetic", "db"],
   runs: ["limit", "db"],
 };
@@ -194,6 +201,7 @@ export function parseCli(argv: readonly string[]): Command {
     return {
       kind: "collect",
       ...parseScanOptions(values, json),
+      ...parseTarget(values),
       db: values.db === undefined ? null : parseDbPath(values.db, "--db"),
       maxDbMb: intInRange(values["max-db-mb"], "--max-db-mb", 1, MAX_DB_MB_LIMIT, COLLECT_DEFAULTS.maxDbMb),
     };
@@ -242,6 +250,23 @@ function parseScanOptions(values: Values, json: boolean): Omit<ScanCommand, "kin
     concurrency: intInRange(str("concurrency"), "--concurrency", 1, SCAN_LIMITS.concurrency, SCAN_DEFAULTS.concurrency),
     maxDurationMs: intInRange(str("max-duration-ms"), "--max-duration-ms", SCAN_LIMITS.minDurationMs, SCAN_LIMITS.maxDurationMs, SCAN_DEFAULTS.maxDurationMs),
     json,
+  };
+}
+
+/** Targeted collection: the market is named, so nothing is discovered and only its own request budget applies. */
+function parseTarget(values: Values) {
+  const id = values["market-id"] as string | undefined;
+  if (id === undefined) return { targetMarketId: null };
+  const given = DISCOVERY_ONLY.filter((k) => values[k] !== undefined);
+  if (given.length > 0) throw usage(`${given.map((k) => `--${k}`).join(", ")} cannot be used with --market-id: nothing is discovered`);
+  return {
+    targetMarketId: parseMarketId(id, "collect"),
+    maxRequests: intInRange(values["max-requests"] as string | undefined, "--max-requests", TARGET_REQUESTS.min, TARGET_REQUESTS.max, TARGET_REQUESTS.max),
+    discoverOrder: "none" as const,
+    maxMarkets: 1,
+    top: 1,
+    pageSize: 1,
+    maxPages: 1,
   };
 }
 

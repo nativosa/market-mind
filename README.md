@@ -46,6 +46,7 @@ npm run cli -- markets [--limit 1..100] [--version v1|v2] [--cursor <next_cursor
 npm run cli -- inspect --market-id <gamma id> [--levels 0..50] [--depth-band <0..1|none>] [--json]
 npm run cli -- scan [options] [--json]          # see "Scanner (Stage 2.1)" below
 npm run cli -- collect [scan options] [--db <path>] [--max-db-mb N] [--json]    # see "Snapshot collection (Stage 2.2)"
+npm run cli -- collect --market-id <id> [--max-requests 4..8] [--db <path>] [--json]    # one named market, no discovery
 npm run cli -- history --market-id <id> [--as-of <ISO>] [--limit N] [--json]
 npm run cli -- runs [--limit N] [--json]
 ```
@@ -218,6 +219,19 @@ npm run cli -- history --market-id 562803 --as-of 2026-10-29T08:00:00Z --json
 ```
 
 **What `collect` does.** `collect` is exactly a `scan`, with the same options, caps, budget, deadline and Ctrl+C handling. On top of that, **every selected market is written to the database as soon as it settles**, one atomic transaction per market. Ranked, filtered, excluded, failed and stopped markets are all stored. Markets that were never selected are only counted. The command makes the same read-only GET requests as `scan`.
+
+**Targeted collection.** A ranked `collect` stores only the first `--max-markets` eligible markets in Gamma's 24-hour-volume order, so it cannot promise to see the same market twice. To sample one market repeatedly, name it:
+
+```bash
+npm run cli -- collect --market-id 679030 --max-requests 8
+```
+
+- **Requests:** 4 GETs (Gamma market, CLOB association, two books), each with at most one retry, so 8 covers every retry. `--max-requests` takes 4 to 8 and defaults to 8.
+- **No discovery:** nothing else is fetched or stored, and there is no fallback to another market. Options that choose or rank markets are refused with `--market-id`, not ignored. `--version`, `--depth-band`, `--max-duration-ms`, `--db` and `--max-db-mb` still apply.
+- **Same pipeline:** after the market is fetched, the run follows the normal path: association, books, metrics, one atomic transaction, and a `collection_run` row whose configuration records `targetMarketId`. The schema is unchanged.
+- **Refused:** a market that is unknown, closed, inactive, not accepting orders, not binary or of another protocol version, and a Gamma answer for a different id. The run is stored as `failed` with no observation.
+- **Reporting:** `Target market <id>: collected as observation <n>` means the books and metrics were stored. Otherwise it says `NOT COLLECTED` and the exit code is not 0. A failed or stopped attempt can still leave an observation row with no metrics, as in a ranked run, and history does not count it as usable.
+- **Unchanged books:** each run is a new timestamped observation, and identical book contents are stored once. History counts these as one distinct state, so repeating a run does not create new evidence of change.
 
 **Database.**
 - **Location:** `data/marketmind.sqlite` by default. The `data/` directory is created on demand. Override with `--db` or `MARKETMIND_DB`.

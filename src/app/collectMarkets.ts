@@ -10,6 +10,7 @@ import {
   persistObservation,
   recordPersistenceFailure,
   recoverRuns,
+  type PersistResult,
   type RecoveryReport,
 } from "../adapters/storage/snapshotStore.js";
 import { FATAL_STORAGE_CODES, openDatabase, sqliteVersion, storageError, toStorageError, type Database } from "../adapters/storage/sqlite.js";
@@ -18,6 +19,7 @@ import { APP_VERSION } from "../config/config.js";
 import { decimalToString } from "../domain/decimal.js";
 import { isMarketMindError, type MarketMindError } from "../domain/errors.js";
 import type { Outcome } from "../domain/market.js";
+import type { Bucket } from "../domain/scan.js";
 import type { AccountingStatus, ObservationRecord, RequestEvidence, RunStatus, SourceType } from "../domain/snapshot.js";
 import { countScan, scanMarkets, type ScanDeps, type ScanEntry, type ScanOptions, type ScanResult, type SettledMarket } from "./scanMarkets.js";
 
@@ -67,6 +69,17 @@ export interface PersistFailure {
   recorded: boolean;
 }
 
+/** What a targeted run stored for its market. */
+export interface CollectTarget {
+  marketId: string;
+  /** True only when metrics were written, which persistObservation does only for two paired books, none invalid. */
+  collected: boolean;
+  /** Set for any stored row, including one that holds no books (a failed or stopped market). */
+  observationId: number | null;
+  bucket: Bucket | null;
+  reasons: string[];
+}
+
 export interface CollectResult {
   runId: string;
   dbPath: string;
@@ -78,6 +91,8 @@ export interface CollectResult {
   scanError: MarketMindError | null;
   storageError: MarketMindError | null;
   persist: PersistCounts;
+  /** Null for a discovery run. */
+  target: CollectTarget | null;
   failures: PersistFailure[];
   recovery: RecoveryReport;
   footprintBefore: { main: number; wal: number; shm: number; total: number };
@@ -145,6 +160,7 @@ function scanConfig(o: ScanOptions, deps: CollectDeps) {
     maxDurationMs: o.maxDurationMs,
     gammaBaseUrl: deps.gammaBaseUrl,
     clobBaseUrl: deps.clobBaseUrl,
+    ...(o.targetMarketId === undefined ? {} : { targetMarketId: o.targetMarketId }),
   };
 }
 
@@ -194,6 +210,7 @@ export async function collectMarkets(options: CollectOptions, deps: CollectDeps)
     // 2. Incremental persistence.
     const counts = { persistedObservations: 0, booksWritten: 0, bookContentsNew: 0, bookContentsReused: 0, metricsWritten: 0 };
     const failures: PersistFailure[] = [];
+    const writes: PersistResult[] = [];
     const storageAbort = new AbortController();
     let fatal: MarketMindError | null = null;
 
@@ -233,6 +250,7 @@ export async function collectMarkets(options: CollectOptions, deps: CollectDeps)
           appVersion: APP_VERSION,
           buildId: options.buildId,
         }, ANALYTICS_VERSION);
+        writes.push(r);
         counts.persistedObservations++;
         counts.booksWritten += r.booksWritten;
         counts.bookContentsNew += r.bookContentsNew;
@@ -303,6 +321,20 @@ export async function collectMarkets(options: CollectOptions, deps: CollectDeps)
       if (fatal === null) fatal = toStorageError(e, "Cannot finalize run");
     }
 
+    const targetId = options.scan.targetMarketId;
+    const entry = scan?.entries[0];
+    const write = writes[0];
+    const target: CollectTarget | null =
+      targetId === undefined
+        ? null
+        : {
+            marketId: targetId,
+            collected: write?.metricsWritten === 1,
+            observationId: write?.observationId ?? null,
+            bucket: entry?.bucket ?? null,
+            reasons: entry?.reasons.map((r) => r.code) ?? [],
+          };
+
     const footprintAfter = databaseFootprint(options.dbPath);
     return {
       runId,
@@ -314,6 +346,7 @@ export async function collectMarkets(options: CollectOptions, deps: CollectDeps)
       scanError,
       storageError: fatal,
       persist,
+      target,
       failures,
       recovery,
       footprintBefore,

@@ -171,9 +171,11 @@ export function formatScan(result: ScanResult): string {
       : "No requests completed.",
     `Filters: spread >= ${dec(o.filters.minSpread)}, top-of-book size >= ${dec(o.filters.minTopSize)} shares, ` +
       `suspicious books ${o.filters.includeSuspicious ? "admitted" : "filtered"}; crossed/locked/empty/one-sided books excluded`,
-    `Discovery: ${result.discovery.pages} page(s), ${result.discovery.recordsReceived} record(s) received, ${c.discovered} unique, ` +
-      `${result.discovery.duplicates.length} duplicate(s); stopped: ${result.discovery.stoppedBecause}` +
-      (o.discoverOrder === "volume24hr" ? "; selection order = Gamma volume24hr desc (not used for ranking)" : "; Gamma default order"),
+    o.targetMarketId !== undefined
+      ? `Target: market ${o.targetMarketId} only; no discovery`
+      : `Discovery: ${result.discovery.pages} page(s), ${result.discovery.recordsReceived} record(s) received, ${c.discovered} unique, ` +
+        `${result.discovery.duplicates.length} duplicate(s); stopped: ${result.discovery.stoppedBecause}` +
+        (o.discoverOrder === "volume24hr" ? "; selection order = Gamma volume24hr desc (not used for ranking)" : "; Gamma default order"),
     `Requests: ${result.budget.used} of ${result.budget.limit} budget (${result.requests.length} logged)`,
     "",
   ];
@@ -284,6 +286,11 @@ export function formatCollect(result: CollectResult): string {
       `; not selected ${n(p.notSelected)} of ${n(p.discovered)} discovered (counts only, not stored)`,
     `Books written ${p.booksWritten} (new contents ${p.bookContentsNew}, deduplicated ${p.bookContentsReused}); metrics rows ${p.metricsWritten}`,
   );
+  const t = result.target;
+  if (t) {
+    const detail = [...(t.bucket ? [`bucket ${t.bucket}`] : []), ...t.reasons].join(", ");
+    out.push(`Target market ${t.marketId}: ${t.collected ? `collected as observation ${t.observationId}` : "NOT COLLECTED"}${detail ? ` (${detail})` : ""}`);
+  }
   const rec = result.recovery;
   if (rec.recovered.length > 0 || rec.unverified.length > 0) {
     out.push(

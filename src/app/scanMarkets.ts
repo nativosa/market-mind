@@ -1,5 +1,5 @@
 import { createClobClient } from "../adapters/polymarket/clobClient.js";
-import { createGammaClient, type MarketPage, type SkippedMarket } from "../adapters/polymarket/gammaClient.js";
+import { createGammaClient, type GammaClient, type MarketPage, type SkippedMarket } from "../adapters/polymarket/gammaClient.js";
 import { createHttpClient, type HttpClient, type HttpDeps, type HttpOptions } from "../adapters/polymarket/httpClient.js";
 import { associateOutcomes, selectOutcomes } from "../adapters/polymarket/normalize.js";
 import { createRequestBudget, type Reservation } from "../adapters/polymarket/requestBudget.js";
@@ -43,6 +43,8 @@ export interface ScanOptions {
   /** Max in-flight HTTP requests. */
   concurrency: number;
   maxDurationMs: number;
+  /** Observe this one market instead of discovering any. Everything after discovery is unchanged. */
+  targetMarketId?: string;
 }
 
 /** Hard upper bounds, enforced here as well as by the CLI parser. */
@@ -120,7 +122,7 @@ export interface ScanEntry {
 export type StopReason = ExecutionStopCode | "DISCOVERY_FAILED";
 const STOP_ORDER: readonly StopReason[] = ["DISCOVERY_FAILED", "BUDGET_EXHAUSTED", "RATE_LIMITED", "DEADLINE", "CANCELLED"];
 
-export type DiscoveryStop = "NO_MORE_PAGES" | "MAX_PAGES" | "ENOUGH_CANDIDATES" | "INTERRUPTED";
+export type DiscoveryStop = "NO_MORE_PAGES" | "MAX_PAGES" | "ENOUGH_CANDIDATES" | "INTERRUPTED" | "TARGET_MARKET";
 
 export interface ScanResult {
   options: ScanOptions;
@@ -225,6 +227,7 @@ export async function scanMarkets(options: ScanOptions, deps: ScanDeps): Promise
   let pages = 0;
   let cursor: string | undefined;
   let stoppedBecause: DiscoveryStop;
+  const target = options.targetMarketId;
   for (;;) {
     if (pages >= options.maxPages) {
       stoppedBecause = "MAX_PAGES";
@@ -248,13 +251,17 @@ export async function scanMarkets(options: ScanOptions, deps: ScanDeps): Promise
     const pageNo = pages + 1;
     let page: MarketPage;
     try {
-      const gamma = createGammaClient(clientFor(reservation, [0, pageNo, 0], `discovery page ${pageNo}`), deps.gammaBaseUrl);
-      page = await gamma.listOpenMarkets({
-        limit: options.pageSize,
-        version: options.version,
-        ...(cursor ? { cursor } : {}),
-        ...(options.discoverOrder === "none" ? {} : { order: options.discoverOrder }),
-      });
+      const scope = target === undefined ? `discovery page ${pageNo}` : `market ${target} metadata`;
+      const gamma = createGammaClient(clientFor(reservation, [0, pageNo, 0], scope), deps.gammaBaseUrl);
+      page =
+        target !== undefined
+          ? await targetPage(gamma, target, options.version)
+          : await gamma.listOpenMarkets({
+              limit: options.pageSize,
+              version: options.version,
+              ...(cursor ? { cursor } : {}),
+              ...(options.discoverOrder === "none" ? {} : { order: options.discoverOrder }),
+            });
     } catch (error) {
       if (!isMarketMindError(error)) throw error;
       if (error.kind === "Cancelled" || error.kind === "BudgetExceeded") {
@@ -284,7 +291,7 @@ export async function scanMarkets(options: ScanOptions, deps: ScanDeps): Promise
       if ("gammaId" in item && scanEligibility(item).bucket === "eligible") eligibleSoFar++;
     }
     if (!page.nextCursor) {
-      stoppedBecause = "NO_MORE_PAGES";
+      stoppedBecause = target === undefined ? "NO_MORE_PAGES" : "TARGET_MARKET";
       break;
     }
     cursor = page.nextCursor;
@@ -452,6 +459,21 @@ function assertWithinLimits(o: ScanOptions): void {
       issues: bad.map(([name, v, min, max]) => `${name}=${v} not in ${min}..${max}`),
     });
   }
+}
+
+/**
+ * The one requested market as a discovery page, or an error: never another market, and never a
+ * market that would be classified and then silently left out of the run.
+ */
+async function targetPage(gamma: GammaClient, id: string, version: ProtocolVersion): Promise<MarketPage> {
+  const market = await gamma.getMarket(id);
+  if (market.gammaId !== id) throw new MarketMindError("Validation", `Gamma answered market ${id} with market ${market.gammaId}`);
+  if (market.version !== version) throw new MarketMindError("Validation", `Market ${id} is ${market.version}, not ${version}; rerun with --version ${market.version}`);
+  const { bucket, reasons } = scanEligibility(market);
+  if (bucket !== "eligible") {
+    throw new MarketMindError(bucket === "failed" ? "Validation" : "Ineligible", `Market ${id} cannot be collected`, { issues: reasons.map((r) => `${r.code}: ${r.detail}`) });
+  }
+  return { markets: [market], skipped: [], nextCursor: null, provenance: market.provenance };
 }
 
 function classifyRecord(item: Market | SkippedMarket, position: number, discoveryPage: number): ScanEntry {

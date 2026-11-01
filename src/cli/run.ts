@@ -110,7 +110,7 @@ export async function run(argv: readonly string[], deps: CliDeps): Promise<numbe
       const dbPath = command.db ?? config.dbPath;
       const result = await collectMarkets(
         {
-          scan: scanOptionsOf(command),
+          scan: { ...scanOptionsOf(command), ...(command.targetMarketId === null ? {} : { targetMarketId: command.targetMarketId }) },
           dbPath,
           createParentDir: dbPath === DEFAULT_DB_PATH,
           maxDbBytes: command.maxDbMb * 1024 * 1024,
