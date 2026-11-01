@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { DISALLOWED_BUILTINS } from "../agent-sdk/options.js";
 
 export const AuthMode = z.enum(["subscription", "api-key"]);
 export type AuthMode = z.infer<typeof AuthMode>;
@@ -153,11 +154,39 @@ export function authPreflight(mode: AuthMode, env: Record<string, string>, cwd: 
   return { mode, cliVersion, evidence: assessed.evidence, problems, passed: problems.length === 0 };
 }
 
-/** The init pool of the 23 recorded v0.5.0 CLI runs, on the pinned CLI. Anything beyond it stops the run. */
-const KNOWN_TOOLS = ["Task", "Bash", "CronCreate", "CronDelete", "CronList", "DesignSync", "Edit", "EnterWorktree", "ExitWorktree", "Glob", "Grep", "ListAgents", "Monitor", "NotebookEdit", "PowerShell", "PushNotification", "Read", "RemoteTrigger", "ReportFindings", "ScheduleWakeup", "SendMessage", "Skill", "TaskStop", "ToolSearch", "WebSearch", "Write"];
+/**
+ * The session flags of a CLI run. `--tools ""` removes every built-in from the session before it starts: measured
+ * on the pinned CLI, nothing is offered to a model and a call is refused as "No such tool available", in the
+ * main session and in the investigator. The forked skill does not need them: it starts from the prompt, with no
+ * main-session model turn and no Skill or Agent tool. `--disallowedTools` repeats the removal as a second layer.
+ * `--allowedTools` only approves tools, so it is no boundary, and `--restricted` also drops the project skill
+ * and agent, which would hand the prompt to the main session.
+ */
+export const cliFlags = (maxBudgetUsd: number, extra: string[] = []): string[] => [
+  "--tools",
+  "",
+  "--disallowedTools",
+  DISALLOWED_BUILTINS.join(","),
+  "--strict-mcp-config",
+  "--setting-sources",
+  "project",
+  "--permission-mode",
+  "default",
+  "--output-format",
+  "stream-json",
+  "--verbose",
+  "--forward-subagent-text",
+  "--no-session-persistence",
+  "--max-budget-usd",
+  String(maxBudgetUsd),
+  ...extra,
+];
+
+/** What the pinned CLI lists with --tools "": the same five tools in every session, and nothing else. */
 const MCP_TOOLS = ["scan_markets", "inspect_market", "list_collection_runs", "get_market_history", "get_observation_details"].map((t) => `mcp__marketmind__${t}`);
 const KNOWN_AGENTS = ["claude", "Explore", "general-purpose", "market-investigator", "Plan", "statusline-setup", "web-fetch"];
-const KNOWN_SKILLS = ["investigate-market", "design", "design-sync", "dataviz", "update-config", "verify", "debug", "code-review", "simplify", "batch", "fewer-permission-prompts", "doctor", "loop", "schedule", "claude-api", "run", "run-skill-generator", "plugin-authoring"];
+/** Listed by the pinned CLI, and which ones appear depends on the credential. With no Skill tool, none can be invoked by a model. */
+const KNOWN_SKILLS = ["investigate-market", "deep-research", "design", "design-sync", "dataviz", "update-config", "verify", "debug", "code-review", "simplify", "batch", "fewer-permission-prompts", "doctor", "loop", "schedule", "claude-api", "workflow-authoring", "run", "run-skill-generator", "plugin-authoring"];
 
 interface InitEvent {
   apiKeySource?: unknown;
@@ -178,13 +207,11 @@ export function initProblems(mode: AuthMode, init: InitEvent): string[] {
   if (mode === "api-key" && key !== "ANTHROPIC_API_KEY") problems.push(`init reports key source ${String(key)}, not ANTHROPIC_API_KEY`);
   if (init.permissionMode !== "default") problems.push(`permission mode is ${String(init.permissionMode)}, not default`);
   const tools = strings(init.tools);
-  const mcp = tools.filter((t) => t.startsWith("mcp__"));
-  if (mcp.length !== MCP_TOOLS.length || !MCP_TOOLS.every((t) => mcp.includes(t))) problems.push(`MCP tools are [${mcp.join(", ")}], expected exactly the five MarketMind tools`);
+  if (tools.length !== MCP_TOOLS.length || !MCP_TOOLS.every((t) => tools.includes(t))) problems.push(`tool pool is [${tools.join(", ")}], expected exactly the five MarketMind tools`);
   const unknown = (found: string[], known: string[], what: string) => {
     const extra = found.filter((x) => !known.includes(x));
     if (extra.length > 0) problems.push(`unexpected ${what}: ${extra.join(", ")}`);
   };
-  unknown(tools.filter((t) => !t.startsWith("mcp__")), KNOWN_TOOLS, "tools");
   unknown(strings(init.agents), KNOWN_AGENTS, "agents");
   unknown(strings(init.skills), KNOWN_SKILLS, "skills");
   const plugins = Array.isArray(init.plugins) ? (init.plugins as { name?: unknown; path?: unknown }[]) : [];

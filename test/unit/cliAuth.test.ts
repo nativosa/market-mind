@@ -244,7 +244,7 @@ describe("the pinned CLI, with fake credentials and a dead proxy", () => {
   });
 });
 
-const GOOD_INIT = { type: "system", subtype: "init", apiKeySource: "none", permissionMode: "default", tools: ["Task", "Bash", "Read", "mcp__marketmind__scan_markets", "mcp__marketmind__inspect_market", "mcp__marketmind__list_collection_runs", "mcp__marketmind__get_market_history", "mcp__marketmind__get_observation_details"], agents: ["claude", "market-investigator"], skills: ["investigate-market"], plugins: [{ name: "cc-plugin-telemetry", path: "builtin" }], mcp_servers: [{ name: "marketmind", status: "connected" }] };
+const GOOD_INIT = { type: "system", subtype: "init", apiKeySource: "none", permissionMode: "default", tools: ["mcp__marketmind__scan_markets", "mcp__marketmind__inspect_market", "mcp__marketmind__list_collection_runs", "mcp__marketmind__get_market_history", "mcp__marketmind__get_observation_details"], agents: ["claude", "market-investigator"], skills: ["investigate-market"], plugins: [{ name: "cc-plugin-telemetry", path: "builtin" }], mcp_servers: [{ name: "marketmind", status: "connected" }] };
 
 describe("init validation", () => {
   it("accepts the expected session", () => {
@@ -257,10 +257,13 @@ describe("init validation", () => {
     ["a helper", { apiKeySource: "apiKeyHelper" }, "key source"],
     ["a managed key", { apiKeySource: "/login managed key" }, "key source"],
     ["a missing source", { apiKeySource: undefined }, "key source"],
-    ["a new built-in tool", { tools: [...GOOD_INIT.tools, "WebFetch"] }, "unexpected tools"],
-    ["a sixth MCP tool", { tools: [...GOOD_INIT.tools, "mcp__marketmind__place_order"] }, "MCP tools"],
-    ["another server's tool", { tools: [...GOOD_INIT.tools, "mcp__github__create_issue"] }, "MCP tools"],
-    ["a missing MCP tool", { tools: GOOD_INIT.tools.filter((t) => !t.endsWith("scan_markets")) }, "MCP tools"],
+    ["a built-in tool", { tools: [...GOOD_INIT.tools, "Bash"] }, "tool pool"],
+    ["an unknown tool", { tools: [...GOOD_INIT.tools, "SomeFutureTool"] }, "tool pool"],
+    ["a sixth MCP tool", { tools: [...GOOD_INIT.tools, "mcp__marketmind__place_order"] }, "tool pool"],
+    ["another server's tool", { tools: [...GOOD_INIT.tools, "mcp__github__create_issue"] }, "tool pool"],
+    ["a missing MCP tool", { tools: GOOD_INIT.tools.filter((t) => !t.endsWith("scan_markets")) }, "tool pool"],
+    ["no tool list", { tools: undefined }, "tool pool"],
+    ["five tools with Bash swapped in", { tools: [...GOOD_INIT.tools.slice(0, 4), "Bash"] }, "tool pool"],
     ["an elevated mode", { permissionMode: "bypassPermissions" }, "permission mode"],
     ["acceptEdits", { permissionMode: "acceptEdits" }, "permission mode"],
     ["a user agent", { agents: ["market-investigator", "my-agent"] }, "unexpected agents"],
@@ -276,12 +279,14 @@ describe("init validation", () => {
   });
 
   const archive = process.env.MARKETMIND_BASELINE_DIR ?? ".eval-out/archive/v0.5.0-baseline";
-  it.skipIf(!existsSync(archive))("all 23 recorded CLI sessions pass", () => {
+  it.skipIf(!existsSync(archive))("the recorded v0.5.0 sessions predate the boundary: their wider pool would now be refused, and nothing else about them", () => {
     const runs = readdirSync(archive).filter((k) => /^[PS]\d\d-r\d/.test(k));
     expect(runs).toHaveLength(23);
     for (const k of runs) {
       const init = readFileSync(join(archive, k, "trace.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { subtype?: string; apiKeySource?: string }).find((e) => e.subtype === "init")!;
-      expect(initProblems("subscription", init), k).toEqual([]);
+      const problems = initProblems("subscription", init);
+      expect(problems, k).toHaveLength(1);
+      expect(problems[0], k).toContain("tool pool");
     }
   });
 });

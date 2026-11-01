@@ -22,7 +22,7 @@ import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { authModeFor, authPreflight, AuthUsageError, cliEnv, mcpConfig, serverEnvProblems, StreamWatch, type AuthMode, type Preflight } from "./cliAuth.js";
+import { authModeFor, authPreflight, AuthUsageError, cliEnv, cliFlags, mcpConfig, serverEnvProblems, StreamWatch, type AuthMode, type Preflight } from "./cliAuth.js";
 import { evaluateDir, historicalArtifacts, historicalMessage, LAUNCHED, runKeyOf } from "./eval/evaluate.js";
 import { promptFor, SCENARIO_SET, SCENARIOS, scenarioById, type EvalScenario } from "./eval/scenarios.js";
 import { RUN_CONTRACT, RunMeta, stableJson } from "./eval/schema.js";
@@ -100,21 +100,7 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
     // Project permission rules are not applied in the fresh (untrusted) temp project, so the copied
     // investigator settings file is passed explicitly; the probe without allow rules passes none.
     const settingsFlag = s.withoutAllowRules ? [] : ["--settings", join(project, INVESTIGATOR_FILES.settings)];
-    const flags = [
-      "--strict-mcp-config",
-      "--setting-sources",
-      "project",
-      "--permission-mode",
-      "default",
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--forward-subagent-text",
-      "--no-session-persistence",
-      "--max-budget-usd",
-      String(o.maxBudgetUsd),
-      ...(s.flags ?? []),
-    ];
+    const flags = cliFlags(o.maxBudgetUsd, s.flags);
     const dbHash = () => (existsSync(db) ? sha256(readFileSync(db)) : null);
     const before = { db: dbHash(), repo: repoState(), project: treeHash(project) };
 

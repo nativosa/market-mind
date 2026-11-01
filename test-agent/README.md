@@ -29,7 +29,7 @@ The investigator under test is the committed v0.5.0 files, which the runner hash
 | `eval/compare.ts` | Deterministic comparison of two graded directories, confounders first |
 | `eval/baselineArchive.ts` | Verifies the preserved v0.5.0 baseline against its committed manifest, then regrades it into a temporary directory |
 | `run.ts` | The real-agent runner (`--harness cli` default, or `--harness sdk`) |
-| `cliAuth.ts` | Explicit authentication for the CLI harness: environment, pre-run gate and stream checks |
+| `cliAuth.ts` | Explicit authentication and the tool boundary for the CLI harness: environment, flags, pre-run gate and stream checks |
 | `sdkRun.ts` | One agent-sdk run in the evaluation layout |
 | `processes.ts` | Shared hashing and process-tree cleanup helpers |
 | `traceSummary.ts` | Human-readable trace summary |
@@ -207,17 +207,23 @@ npx tsx test-agent/run.ts --harness sdk --scenario S01,S02,S03,S09,S10 --max-bud
 | | CLI harness | SDK harness |
 |---|---|---|
 | Investigator | Forked subagent under a main session | Main-thread agent |
-| Tools in the session | 31: built-ins such as `Bash` and `Write` are in the main session's pool, and the subagent is limited to the five MarketMind tools | Exactly the five MarketMind tools |
-| Skills, plugins, agents | Built-ins present; anything beyond the recorded set stops the run | None |
-| Pre-run tool check | None: `init` arrives after the first request | Two validation phases, the first before the prompt |
-| Per-call guard | None; `permissions` rules and the subagent allowlist | PreToolUse deny-only guard |
+| Tools in the session | Exactly the five MarketMind tools (`--tools ""`). The subagent's own list is the same five | Exactly the five MarketMind tools |
+| Removed tools | Not offered; a call is refused as `No such tool available` | The same |
+| Bundled skills, plugins, agents | Still listed, with no tool that can invoke them; anything unrecognized stops the run | None |
+| Check of the session | After the run starts: `init` arrives after the first request | Two validation phases, the first before the prompt |
+| Per-call guard | None: `permissions` rules, `--disallowedTools` and the subagent allowlist | PreToolUse deny-only guard, which also enforces repeats and call budgets |
 | After the run | D2, D3, D4 and D4b grade what happened | D2, D3, D4 and D18 |
 
-The CLI harness detects a wider pool rather than preventing one: `initProblems` stops a run that shows an unknown tool, agent, skill, plugin or MCP server, or a permission mode other than `default`. It compares with the session recorded in the 23 baseline runs on the pinned CLI.
+`--tools ""` is the boundary. It removes built-ins before the session starts, on the pinned CLI, for the main session and the investigator alike, and the forked skill still runs because it starts from the prompt without a main-session model turn or a Skill or Agent tool. `--disallowedTools` repeats it as a second layer. `--allowedTools` only approves tools, so it is not used as a boundary. `--restricted` is not used because it also ignores the project's skill and agent, which sends the prompt to the main session.
+
+`initProblems` then confirms the session: the tool pool must be exactly the five tools, and an unrecognized agent, skill, plugin or MCP server, or a permission mode other than `default`, stops the run. That confirmation arrives after the first request, so the prevention is the flag, and the pinned CLI is what makes it trustworthy: `test/unit/cliBoundary.test.ts` measures it on that binary, against a local stub with fake credentials, and the gate refuses any other version.
+
+Runs recorded before this change had 31 tools in the main session pool. They are not comparable on this point.
 
 **How each run is isolated.**
 - A new temp project holds only copies of the agent, the skill and `settings.json`. The main session therefore cannot read sources, golden files or rubrics.
 - The copied settings are passed with `--settings`, because project permission rules are not applied in the fresh, untrusted temp folder. This was observed in the Stage 2.5 trial.
+- `--tools ""` and `--disallowedTools` remove every built-in tool (see "CLI and SDK boundaries differ").
 - Other flags: `--strict-mcp-config`, `--setting-sources project`, `--permission-mode default`, `stream-json --verbose --forward-subagent-text` and `--no-session-persistence`.
 - The MCP server starts through `agent-sdk/mcp-launcher.mjs`, as in the SDK harness, so no credential or home directory reaches it. Runs recorded before Stage 2.7 started it directly.
 
