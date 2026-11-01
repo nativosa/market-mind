@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/client";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio";
@@ -49,6 +52,26 @@ describe("spawned real server (bin/marketmind-mcp.mjs) with the network forbidde
     expect(details.structuredContent).toMatchObject({ observation: { observationId: id, gammaId: "1" } });
     expect(stderr()).toContain("ready on stdio");
     expect(stderr()).not.toContain("[forbidNetwork]");
+  }, 30_000);
+
+  it("serves a fractional median gap over stdio and leaves the database exactly as it was", async () => {
+    const dbPath = tempDbPath();
+    const ids = [1_000, 11_345_919, 18_235_401].map((t, i) => seedObservation(dbPath, { id: "1", receivedAt: [t - 10, t], ref: { bids: [["0.40", "100"]], asks: [[`0.4${5 + i}`, "100"]] } }));
+    const hash = () => createHash("sha256").update(readFileSync(dbPath)).digest("hex");
+    const before = hash();
+    const { client, stderr } = await stdioClient([LAUNCHER], { MARKETMIND_DB: dbPath, NODE_OPTIONS: `--import ${FORBID_NETWORK}` }, tmpdir());
+    const history = await callTool(client, "get_market_history", { marketId: "1" });
+    expect(history.isError).toBeFalsy();
+    expect(history.structuredContent).toMatchObject({ status: "ok", evidence: "available", stats: { usable: 3, states: { n: 3, distinct: 3 }, gaps: { n: 2, medianMs: 9_117_200.5 } } });
+    expect(hash()).toBe(before);
+    expect(stderr()).not.toContain("[forbidNetwork]");
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
+      expect(db.prepare("SELECT id FROM market_observation ORDER BY id").all().map((r) => r.id)).toEqual(ids);
+    } finally {
+      db.close();
+    }
   }, 30_000);
 
   it("a live tool's every attempt reaches only the (blocked) network and maps to upstream_unavailable", async () => {

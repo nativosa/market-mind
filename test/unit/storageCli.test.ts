@@ -6,6 +6,7 @@ import { exitCodeFor, run } from "../../src/cli/run.js";
 import { APP_VERSION, DEFAULT_CONFIG, loadConfig, parseDbPath } from "../../src/config/config.js";
 import type { MarketMindError } from "../../src/domain/errors.js";
 import { fakeFetch, json, testDeps, type Reply } from "../helpers.js";
+import { seedObservation } from "../mcpFixtures.js";
 import { scanRoutes, type MarketSpec } from "../scanFixtures.js";
 import { cleanupTemp, clock, fakeLiveness, openMigrated, tempDbPath } from "../storageFixtures.js";
 
@@ -195,6 +196,16 @@ describe("collect, history and runs commands", () => {
     expect(runs.stdout).toContain("complete  verified");
     const rj = await cli(["runs", "--db", db, "--json"], "forbidden");
     expect((JSON.parse(rj.stdout) as { runs: unknown[] }).runs).toHaveLength(1);
+  });
+
+  it("history prints a fractional median gap as a duration, and keeps the exact value in --json", async () => {
+    const db = tempDbPath();
+    for (const t of [1_000, 11_345_919, 18_235_401]) seedObservation(db, { id: "1", receivedAt: [t - 10, t] });
+    const h = await cli(["history", "--market-id", "1", "--db", db], "forbidden");
+    expect(h.code).toBe(0);
+    expect(h.stdout).toContain("Gaps between usable samples (n=2): min 1h 54m, median 2h 31m, max 3h 9m");
+    const body = JSON.parse((await cli(["history", "--market-id", "1", "--db", db, "--json"], "forbidden")).stdout) as { stats: { gaps: unknown } };
+    expect(body.stats.gaps).toEqual({ n: 2, minMs: 6_889_482, medianMs: 9_117_200.5, maxMs: 11_344_919, irregular: 0 });
   });
 
   it("history on a missing database exits 3 and creates nothing", async () => {

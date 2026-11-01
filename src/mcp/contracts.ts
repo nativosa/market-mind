@@ -50,6 +50,8 @@ const asOf = z.iso
 const Dec = z.string().regex(/^-?\d+(\.\d+)?$/);
 const Iso = z.string();
 const Count = z.number().int().min(0);
+/** A median of whole milliseconds: with an even number of gaps it is the mean of the middle two, so it can end in .5. */
+const MedianMs = z.number().min(0);
 
 // ---- inputs ----
 
@@ -374,7 +376,7 @@ export const HistoryOutput = envelope(CONTRACT.history, ["ok", "no_history"], {
     spread: obj({ n: Count, min: Stat, median: Stat, max: Stat, current: Stat, previous: Stat, change: Stat }),
     topSize: obj({ n: Count, current: Stat, previous: Stat, change: Stat }),
     threshold: obj({ n: Count, threshold: Dec, atOrAbove: Count, percentOfSamples: Stat }),
-    gaps: obj({ n: Count, minMs: Count.nullable(), medianMs: Count.nullable(), maxMs: Count.nullable(), irregular: Count }),
+    gaps: obj({ n: Count, minMs: Count.nullable(), medianMs: MedianMs.nullable(), maxMs: Count.nullable(), irregular: Count }),
     states: obj({ n: Count, distinct: Count }),
   }).nullable(),
   rows: obj({

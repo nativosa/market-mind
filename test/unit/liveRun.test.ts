@@ -1,8 +1,8 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { Client } from "@modelcontextprotocol/client";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -123,6 +123,9 @@ const liveHeader = { contract: "x", appVersion: APP_VERSION, generatedAt: "2026-
 const INSPECT_OK = { ...liveHeader, source: "live", requests: [{ url: "https://gamma-api.polymarket.com/markets/1" }, { url: "https://clob.polymarket.com/book?token_id=1" }], outcomes: [{ request: { url: "https://clob.polymarket.com/book?token_id=1" } }], budget: { call: { limit: 8, used: 4 }, process: { limit: 16, used: 4, remaining: 12 } } };
 const MISSING_DB = { contract: "marketmind.error/1", error: { category: "database_missing", code: "DATABASE_MISSING", message: "none", retryable: false, details: {} } };
 const UPSTREAM = { contract: "marketmind.error/1", error: { category: "upstream_unavailable", code: null, message: "down", retryable: true, details: { attempts: 2 } } };
+const STORED_OK = { ...liveHeader, source: "stored", rows: [{ sourceType: "live" }] };
+/** The text Claude Code 2.1.302 recorded when the server's own output validation rejected a result. */
+const VALIDATION_FAILURE = "Output validation error: Invalid structured content for tool get_market_history: stats.gaps.medianMs: Invalid input: expected int, received number";
 
 interface Step {
   name: string;
@@ -135,8 +138,8 @@ const inspect = (result: unknown = INSPECT_OK, input: Record<string, unknown> = 
 const history = (result: unknown = MISSING_DB, input: Record<string, unknown> = { marketId: "1", limit: 10 }): Step => ({ name: tool("get_market_history"), input, result, isError: true });
 
 /** A stream as the CLI writes it, so the checks are tested on what parseTrace really produces. */
-function traceOf(steps: Step[], text = report("1")): ReturnType<typeof parseTrace> {
-  const lines: unknown[] = [{ type: "system", subtype: "init", model: "m", tools: [] }, { type: "system", subtype: "task_started", subagent_type: "market-investigator" }];
+function streamOf(steps: Step[], text = report("1"), init: unknown = { type: "system", subtype: "init", model: "m", tools: [] }): string[] {
+  const lines: unknown[] = [init, { type: "system", subtype: "task_started", subagent_type: "market-investigator" }];
   steps.forEach((s, i) => {
     const parent = (s.scope ?? "subagent") === "main" ? null : "forked-command-investigate-market";
     lines.push({ type: "assistant", parent_tool_use_id: parent, message: { model: "claude-sonnet-5-5", content: [{ type: "tool_use", id: `t${i}`, name: s.name, input: s.input ?? {} }] } });
@@ -144,9 +147,10 @@ function traceOf(steps: Step[], text = report("1")): ReturnType<typeof parseTrac
   });
   lines.push({ type: "assistant", parent_tool_use_id: "forked-command-investigate-market", message: { model: "claude-sonnet-5-5", content: [{ type: "text", text }] } });
   lines.push({ type: "result", subtype: "success", is_error: false, total_cost_usd: 0.05, modelUsage: {}, result: text });
-  return parseTrace(lines.map((l) => JSON.stringify(l)).join("\n"));
+  return lines.map((l) => JSON.stringify(l));
 }
-const noProblem = (steps: Step[], text?: string) => liveProblems(traceOf(steps, text), "1");
+const traceOf = (steps: Step[], text = report("1")) => parseTrace(streamOf(steps, text).join("\n"));
+const noProblem =(steps: Step[], text?: string) => liveProblems(traceOf(steps, text), "1");
 
 describe("provenance and session checks", () => {
   it("accepts a live inspection with no database", () => {
@@ -217,6 +221,50 @@ describe("provenance and session checks", () => {
     expect(evidenceSummary(traceOf([{ ...history(empty), isError: false }]).calls, "").storedHistory).toContain("holds no observation");
     expect(evidenceSummary(traceOf([]).calls, "").liveObservation).toContain("no live inspection");
     expect(evidenceSummary(traceOf([inspect(UPSTREAM)]).calls, "").liveObservation).toBe("failed: upstream_unavailable");
+  });
+
+  const stored = (result: unknown): Step => ({ ...history(result), isError: false });
+  const noResult: Step = { name: tool("get_market_history"), input: { marketId: "1", limit: 10 } };
+  const OUTCOMES: [string, Step, string][] = [
+    ["a valid result", stored(STORED_OK), "ok at 2026-11-01T02:12:29.536Z"],
+    ["no observations", stored({ ...STORED_OK, status: "no_history" }), "none: the database holds no observation of this market"],
+    ["no database", history(), "none: no local database exists, so stored history is unknown"],
+    ["a rejected output schema", history(VALIDATION_FAILURE), "failed: tool or output validation error"],
+    ["an error in the MarketMind contract", history({ ...MISSING_DB, error: { category: "storage_error" } }), "failed: storage_error"],
+    ["an error with no category", history({ error: {} }), "failed: unrecognized error"],
+    ["a call with no result", noResult, "failed: no tool result"],
+    ["a success that is not JSON", stored("summary only"), "failed: unreadable tool result"],
+    ["a success with no status", stored({ source: "stored" }), "failed: unreadable tool result"],
+  ];
+
+  it.each(OUTCOMES)("stored history is reported for %s, and the header never shows malformed provenance", (_, step, expected) => {
+    const storedHistory = evidenceSummary(traceOf([inspect(), step]).calls, "").storedHistory;
+    expect(storedHistory).toBe(expected);
+    expect(renderLiveReport({ ...RECORD, evidence: { ...RECORD.evidence, storedHistory } }, "")).toContain(`| Stored historical observations | Local database, read only | ${expected} |`);
+  });
+
+  it("says when stored history was never read, and treats a failed inspection the same way", () => {
+    expect(evidenceSummary(traceOf([inspect()]).calls, "").storedHistory).toBe("none: stored history was not read");
+    expect(evidenceSummary(traceOf([{ ...inspect(VALIDATION_FAILURE), isError: true }]).calls, "").liveObservation).toBe("failed: tool or output validation error");
+  });
+
+  it("a status of no_history in an error result is a failure, not an empty history", () => {
+    expect(evidenceSummary(traceOf([history({ status: "no_history" })]).calls, "").storedHistory).toBe("failed: tool or output validation error");
+  });
+
+  it("fails the run when history could not be read, but not when there is none to read", () => {
+    expect(noProblem([inspect(), stored(STORED_OK)])).toEqual([]);
+    expect(noProblem([inspect(), stored({ ...STORED_OK, status: "no_history" })])).toEqual([]);
+    expect(noProblem([inspect(), history()])).toEqual([]);
+    expect(noProblem([inspect(), history(VALIDATION_FAILURE)]).join(" | ")).toContain("stored history could not be retrieved: tool or output validation error");
+    expect(noProblem([inspect(), history({ ...MISSING_DB, error: { category: "storage_error" } })])).toEqual(["stored history could not be retrieved: storage_error"]);
+    expect(noProblem([inspect(), stored({ source: "stored" })]).join(" | ")).toContain("stored history could not be retrieved: unreadable tool result");
+  });
+
+  it("judges history by its last call, so a corrected call passes and a later failure does not", () => {
+    const bad = history({ ...MISSING_DB, error: { category: "invalid_arguments" } }, { marketId: "1", limit: 99 });
+    expect(noProblem([inspect(), bad, stored(STORED_OK)])).toEqual([]);
+    expect(noProblem([inspect(), stored(STORED_OK), bad])).toEqual(["stored history could not be retrieved: invalid_arguments"]);
   });
 });
 
@@ -510,6 +558,55 @@ describe("the runner", () => {
     const t = fakeDeps({ child: `const fs=require("fs");const c=JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--mcp-config")+1],"utf8"));fs.appendFileSync(c.mcpServers.marketmind.env.MARKETMIND_LAUNCH_REPORT,${JSON.stringify(line + "\n")});` });
     expect(await runLive(t.options, t.deps)).toBe(1);
     expect(artifact(t.out).problems.join(" | ")).toContain("unexpected variables: ANTHROPIC_API_KEY");
+  });
+
+  describe("the exit status", () => {
+    /** A whole session by a stand-in CLI that passes every check unless a step or its own exit code says otherwise. */
+    const session = (steps: Step[], exitCode: number) => {
+      const keys = ["PATH", "MARKETMIND_DB", ...Object.keys(SERVER_SETTINGS)];
+      const launcher = JSON.stringify({ contract: "marketmind.mcp-launcher/1", launcherPid: 1, serverPid: 2, receivedEnvKeys: keys, serverEnvKeys: keys, anthropicKeyReceived: false, credentialKeysReceived: [] });
+      const lines = streamOf(steps, report("1"), JSON.parse(INIT()));
+      return fakeDeps({ child: `const fs=require("fs");const c=JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--mcp-config")+1],"utf8"));fs.appendFileSync(c.mcpServers.marketmind.env.MARKETMIND_LAUNCH_REPORT,${JSON.stringify(`${launcher}\n`)});fs.writeSync(1,${JSON.stringify(`${lines.join("\n")}\n`)});process.exitCode=${exitCode};` });
+    };
+    const GOOD = [inspect(), { ...history(STORED_OK), isError: false }];
+    const FAILED = [inspect(), history(VALIDATION_FAILURE)];
+
+    it("is 0 for a session that passes every check", async () => {
+      const t = session(GOOD, 0);
+      expect(await runLive(t.options, t.deps)).toBe(0);
+      expect(artifact(t.out)).toMatchObject({ passed: true, problems: [], exitCode: 0 });
+      expect(artifact(t.out).evidence.storedHistory).toBe("ok at 2026-11-01T02:12:29.536Z");
+    });
+
+    it.each([0, 3])("is 1 when history failed validation and the Claude process exited %i", async (code) => {
+      const t = session(FAILED, code);
+      expect(await runLive(t.options, t.deps)).toBe(1);
+      const r = artifact(t.out);
+      expect(r).toMatchObject({ passed: false, exitCode: code });
+      expect(r.problems).toContain("stored history could not be retrieved: tool or output validation error");
+      expect(r.evidence.storedHistory).toBe("failed: tool or output validation error");
+      const md = readFileSync(join(t.out, "report.md"), "utf8");
+      expect(md).toContain("RUN CHECKS FAILED");
+      expect(md).toContain("| Local database, read only | failed: tool or output validation error |");
+      expect(md).not.toContain("undefined");
+    });
+
+    it("is 1 when the Claude process failed, even if every check passed", async () => {
+      const t = session(GOOD, 3);
+      expect(await runLive(t.options, t.deps)).toBe(1);
+      expect(artifact(t.out).problems).toEqual(["the Claude process exited with code 3"]);
+    });
+
+    it("reaches the operating system: the command sets the status the runner returned", () => {
+      const noClaude = (dir: string) => !["claude", "claude.exe", "claude.cmd"].some((f) => existsSync(join(dir, f)));
+      const path = (process.env.PATH ?? "").split(delimiter).filter(noClaude).join(delimiter);
+      const out = ".live-out/exit-status-test";
+      // With no CLI to find the gate refuses, so no session starts and no credential is read.
+      const r = spawnSync(process.execPath, ["--import", "tsx", "test-agent/live.ts", ...BASE.slice(0, 6), "--out", out], { cwd: REPO, env: { ...getDefaultEnvironment(), PATH: path, Path: path }, encoding: "utf8", timeout: 60_000 });
+      expect(r.stdout).toContain("not started");
+      expect(r.status).toBe(1);
+      expect(existsSync(join(REPO, out))).toBe(false);
+    });
   });
 
   it("fails on a changed database, repository or temp project, and on a server that did not get its settings", async () => {

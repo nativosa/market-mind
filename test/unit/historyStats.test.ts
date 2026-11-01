@@ -103,6 +103,38 @@ describe("computeHistoryStats", () => {
     expect(st.gaps).toEqual({ n: 4, minMs: 60_000, medianMs: 60_000, maxMs: 420_000, irregular: 1 });
   });
 
+  it("three samples with a fractional median gap keep the half millisecond", () => {
+    const st = computeHistoryStats([0, 11_344_919, 18_234_401].map((at) => point({ at })), T);
+    expect(st.gaps).toEqual({ n: 2, minMs: 6_889_482, medianMs: 9_117_200.5, maxMs: 11_344_919, irregular: 0 });
+  });
+
+  it("three samples with a whole median gap stay whole", () => {
+    const st = computeHistoryStats([0, 60_000, 180_000].map((at) => point({ at })), T);
+    expect(st.gaps).toEqual({ n: 2, minMs: 60_000, medianMs: 90_000, maxMs: 120_000, irregular: 0 });
+  });
+
+  it.each<[string, number[], number]>([
+    ["one gap", [1_000], 1_000],
+    ["two gaps, whole", [1_000, 3_000], 2_000],
+    ["two gaps, fractional", [1_000, 2_001], 1_500.5],
+    ["three gaps", [4_000, 1_000, 2_000], 2_000],
+    ["four gaps, fractional", [1, 2, 3, 4], 2.5],
+    ["five gaps", [5, 1, 4, 2, 3], 3],
+  ])("median gap with %s", (_, gaps, median) => {
+    let at = 0;
+    const times = [0, ...gaps.map((g) => (at += g))];
+    expect(computeHistoryStats(times.map((a) => point({ at: a })), T).gaps.medianMs).toBe(median);
+  });
+
+  it("irregular gaps are judged against the exact median: rounding either way would miscount these", () => {
+    const series = (gaps: number[]) => {
+      let at = 0;
+      return computeHistoryStats([0, ...gaps.map((g) => (at += g))].map((a) => point({ at: a })), T).gaps;
+    };
+    expect(series([10, 11, 22, 33])).toMatchObject({ medianMs: 16.5, irregular: 0 });
+    expect(series([10, 11, 22, 34])).toMatchObject({ medianMs: 16.5, irregular: 1 });
+  });
+
   it("distinct book states ignore repeated identical contents", () => {
     const same: [string, string] = ["A", "B"];
     const pts = [point({ at: 0, hashes: same }), point({ at: 1, hashes: same }), point({ at: 2, hashes: ["A", "C"] }), point({ at: 3, hashes: same })];

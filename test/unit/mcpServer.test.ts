@@ -6,7 +6,7 @@ import { createRun, finalizeRun, persistObservation } from "../../src/adapters/s
 import { all } from "../../src/adapters/storage/sqlite.js";
 import { ANALYTICS_VERSION } from "../../src/analytics/version.js";
 import { APP_VERSION } from "../../src/config/config.js";
-import { CONTRACT } from "../../src/mcp/contracts.js";
+import { CONTRACT, HistoryOutput } from "../../src/mcp/contracts.js";
 import { json, timeoutError } from "../helpers.js";
 import { V1_ROUTES, V2_ROUTES } from "../routes.js";
 import { assetId, bookBody, conditionId, gammaRecord, scanRoutes, type MarketSpec } from "../scanFixtures.js";
@@ -361,6 +361,38 @@ describe("get_market_history", () => {
     expect(v.stats!.spread).toMatchObject({ n: 5, min: "0.05", max: "0.05", current: "0.05" });
     expect(v.rows).toMatchObject({ returnedCount: 2, totalCount: 5, truncated: true });
     expect(v.rows.items[0]!.runStatus).toBe("running");
+  });
+
+  describe("gap statistics through the real output schema", () => {
+    const seedAt = (dbPath: string, times: number[]) => times.forEach((t, i) => seedObservation(dbPath, { id: "1", receivedAt: [t - 10, t], ref: { bids: [["0.40", "100"]], asks: [[`0.4${5 + i}`, "100"]] } }));
+
+    it("accepts a fractional median, on both the server and the client side", async () => {
+      const dbPath = tempDbPath();
+      seedAt(dbPath, [1_000, 11_345_919, 18_235_401]);
+      const v = ok(await call(await server({ dbPath }), "get_market_history", { marketId: "1" }));
+      expect(v.stats).toMatchObject({ usable: 3, states: { n: 3, distinct: 3 }, gaps: { n: 2, minMs: 6_889_482, medianMs: 9_117_200.5, maxMs: 11_344_919, irregular: 0 } });
+      expect(v.rows.items.map((r: { flags: { gapMs: number | null } }) => r.flags.gapMs)).toEqual([6_889_482, 11_344_919, null]);
+    });
+
+    it("accepts a whole median", async () => {
+      const dbPath = tempDbPath();
+      seedAt(dbPath, [1_000, 61_000, 181_000]);
+      const v = ok(await call(await server({ dbPath }), "get_market_history", { marketId: "1" }));
+      expect(v.stats!.gaps).toEqual({ n: 2, minMs: 60_000, medianMs: 90_000, maxMs: 120_000, irregular: 0 });
+    });
+
+    it("widens only the median: the other gap fields stay integers, and no median is negative or infinite", async () => {
+      const dbPath = tempDbPath();
+      seedAt(dbPath, [1_000, 61_000, 181_000]);
+      const valid = ok(await call(await server({ dbPath }), "get_market_history", { marketId: "1" }));
+      const withGaps = (gaps: object) => HistoryOutput.safeParse({ ...valid, stats: { ...valid.stats, gaps: { ...valid.stats!.gaps, ...gaps } } }).success;
+      expect(withGaps({})).toBe(true);
+      expect(withGaps({ medianMs: 0.5 })).toBe(true);
+      expect(withGaps({ medianMs: null })).toBe(true);
+      for (const bad of [{ minMs: 0.5 }, { maxMs: 0.5 }, { n: 0.5 }, { irregular: 0.5 }, { medianMs: -0.5 }, { medianMs: Number.POSITIVE_INFINITY }, { medianMs: Number.NaN }, { medianMs: "1.5" }]) expect(withGaps(bad), JSON.stringify(bad)).toBe(false);
+      const row = valid.rows.items[0]!;
+      expect(HistoryOutput.safeParse({ ...valid, rows: { ...valid.rows, items: [{ ...row, flags: { ...row.flags, gapMs: 0.5 } }] } }).success).toBe(false);
+    });
   });
 
   it("excludes synthetic runs unless asked", async () => {

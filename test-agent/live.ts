@@ -117,6 +117,16 @@ function valuesOf(v: unknown, key: string, found: unknown[] = []): unknown[] {
 const isLiveTool = (c: ToolCall) => ["scan_markets", "inspect_market"].includes(shortName(c.name));
 const errorOf = (c: ToolCall) => asObject(asObject(c.result.json)?.error);
 
+/** Why a call gave no usable result, or null. A result rejected on its way out, by output validation, has no error category. */
+function failureOf(c: ToolCall): string | null {
+  const error = errorOf(c);
+  if (error) return typeof error.category === "string" ? error.category : "unrecognized error";
+  if (c.result.status === "missing") return "no tool result";
+  if (c.result.status === "error") return "tool or output validation error";
+  const body = asObject(c.result.json);
+  return typeof body?.status === "string" && typeof body.generatedAt === "string" ? null : "unreadable tool result";
+}
+
 export interface RequestCount {
   ceiling: number;
   /** The limit the server reported, which shows the setting reached it. Null if no live call succeeded. */
@@ -188,6 +198,10 @@ export function liveProblems(trace: ParsedTrace, marketId: string): string[] {
   }
   const inspected = calls.filter((c) => shortName(c.name) === "inspect_market" && c.result.status === "ok" && asObject(c.result.json)?.source === "live");
   if (inspected.length === 0) problems.push("no live inspection of the market succeeded");
+  // A missing database is a state to report. Any other failure means existing evidence could not be read.
+  const history = calls.filter((c) => shortName(c.name) === "get_market_history").at(-1);
+  const historyFailure = history && errorOf(history)?.category !== "database_missing" ? failureOf(history) : null;
+  if (historyFailure) problems.push(`stored history could not be retrieved: ${historyFailure}`);
 
   const requests = requestCount(calls);
   if (requests.serverLimit !== null && requests.serverLimit !== REQUEST_CEILING) problems.push(`the server's request limit is ${requests.serverLimit}, not ${REQUEST_CEILING}`);
@@ -212,8 +226,8 @@ export interface EvidenceSummary {
 export function evidenceSummary(calls: ToolCall[], reportText: string): EvidenceSummary {
   const describe = (c: ToolCall | undefined, none: string) => {
     if (!c) return none;
-    const error = errorOf(c);
-    if (error) return `failed: ${String(error.category)}`;
+    const failure = failureOf(c);
+    if (failure) return `failed: ${failure}`;
     const body = asObject(c.result.json);
     return `${String(body?.status)} at ${String(body?.generatedAt)}`;
   };
@@ -222,7 +236,7 @@ export function evidenceSummary(calls: ToolCall[], reportText: string): Evidence
   const count = (re: RegExp) => [...reportText.matchAll(re)].length;
   return {
     liveObservation: describe(last("inspect_market"), "none: no live inspection was made"),
-    storedHistory: history && errorOf(history)?.category === "database_missing" ? "none: no local database exists, so stored history is unknown" : asObject(history?.result.json)?.status === "no_history" ? "none: the database holds no observation of this market" : describe(history, "none: stored history was not read"),
+    storedHistory: history && errorOf(history)?.category === "database_missing" ? "none: no local database exists, so stored history is unknown" : history?.result.status === "ok" && asObject(history.result.json)?.status === "no_history" ? "none: the database holds no observation of this market" : describe(history, "none: stored history was not read"),
     tags: { fact: count(/\[FACT\b/g), calculated: count(/\[CALC\b/g), interpretation: count(/\[INTERPRETATION\]/g), unknown: count(/\[UNKNOWN\]/g) },
   };
 }
@@ -424,6 +438,7 @@ export async function runLive(o: LiveOptions, deps: LiveDeps): Promise<number> {
     const settingsReached = Object.keys(SERVER_SETTINGS).filter((k) => !launcher.reports.every((r) => r.serverEnvKeys.includes(k)));
     const problems = [
       ...(session.stopReason ? [session.stopReason] : []),
+      ...(session.code === 0 || session.stopReason ? [] : [`the Claude process exited with code ${session.code}`]),
       ...watch.finish(),
       ...liveProblems(trace, o.marketId),
       ...launcher.problems,
