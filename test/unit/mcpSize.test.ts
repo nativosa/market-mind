@@ -100,7 +100,7 @@ describe("worst-case response sizes (structured content + text, serialized)", ()
     expect(v.stats!.usable).toBe(30);
     expect(v.rows.totalCount).toBe(30);
     expect(v.rows.truncated).toBe(true);
-  });
+  }, 30_000); // 30 database seeds: about 2 s alone, slower under the parallel suite
 
   it("get_observation_details with 300-level books at levels 50", async () => {
     const dbPath = tempDbPath();

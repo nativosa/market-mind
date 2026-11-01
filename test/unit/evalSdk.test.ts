@@ -94,7 +94,7 @@ describe("agent-sdk runs through the evaluation pipeline", () => {
   it("a correct SDK investigation passes the SDK-specific checks and grades content exactly like the CLI", async () => {
     const out = tempDir("mm-sdk-out-");
     const meta = await sdkRun(out, await replayed(s03Calls, S03.db));
-    expect(meta.execution).toEqual({ mode: "agent-sdk", artifact: "execution.json" });
+    expect(meta.execution).toEqual({ mode: "agent-sdk", artifact: "execution.json", auth: { mode: "api-key" } });
     expect(readdirSync(join(out, "S03-r1")).sort()).toEqual(["execution.json", "run.json", "sdk-messages.jsonl", "stderr.txt"]);
     const { results, scorecard } = await evaluateDir(out);
     const r = results[0]!;

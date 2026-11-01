@@ -29,6 +29,7 @@ The investigator under test is the committed v0.5.0 files, which the runner hash
 | `eval/compare.ts` | Deterministic comparison of two graded directories, confounders first |
 | `eval/baselineArchive.ts` | Verifies the preserved v0.5.0 baseline against its committed manifest, then regrades it into a temporary directory |
 | `run.ts` | The real-agent runner (`--harness cli` default, or `--harness sdk`) |
+| `cliAuth.ts` | Explicit authentication for the CLI harness: environment, pre-run gate and stream checks |
 | `sdkRun.ts` | One agent-sdk run in the evaluation layout |
 | `processes.ts` | Shared hashing and process-tree cleanup helpers |
 | `traceSummary.ts` | Human-readable trace summary |
@@ -170,9 +171,11 @@ For each item, set a verdict and write a one-line note that cites the report. Se
 ## Running
 
 ```bash
-npx tsx test-agent/run.ts --scenario S01,S03          # chosen scenarios
-npx tsx test-agent/run.ts --all                       # the 12 golden scenarios
-npx tsx test-agent/run.ts --scenario S03 --repeat 2   # adds repetitions r2, r3 (numbering continues)
+npx tsx test-agent/run.ts --auth subscription --auth-check               # the gate only: no prompt, no model request
+npx tsx test-agent/run.ts --auth subscription --scenario S01,S03          # chosen scenarios
+npx tsx test-agent/run.ts --auth subscription --all                       # the 12 golden scenarios
+npx tsx test-agent/run.ts --auth subscription --scenario S03 --repeat 2   # adds repetitions r2, r3 (numbering continues)
+#   --auth subscription|api-key is required for the CLI harness (see "Authentication")
 #   --out <dir> (default: <os tmp>/marketmind-eval/<timestamp>; inside the repo only under .eval-out/)
 #   --max-budget-usd 0.40 (per run)   --total-budget-usd 3 (per output directory)   --timeout-ms 300000
 npx tsx test-agent/eval/evaluate.ts <out>             # re-grade offline; identical inputs give identical bytes
@@ -183,10 +186,40 @@ npx tsx test-agent/eval/compare.ts <baseline> <candidate>   # confounders, then 
 npx tsx test-agent/run.ts --harness sdk --scenario S01,S02,S03,S09,S10 --max-budget-usd 0.40 --total-budget-usd 2 --out .eval-out/sdk
 ```
 
+**Authentication.** `--auth` is explicit for the CLI harness. It is never inferred from the shell, and neither mode falls back to the other. The SDK harness stays API-key only and refuses `--auth subscription` until Gate G0 is resolved. A real subscription run has not been made under this gate yet.
+
+| | `--auth subscription` | `--auth api-key` |
+|---|---|---|
+| Child environment | Allowlist: platform variables and the real home directory, no credential variable | Allowlist: platform variables, `ANTHROPIC_API_KEY` and an empty temporary home |
+| Gate requires | `authMethod: claude.ai`, `apiProvider: firstParty`, a recognized personal plan, and no `apiKeySource` | `authMethod: api_key`, `apiKeySource: ANTHROPIC_API_KEY`, `firstParty`, and no login visible |
+| `system/init` must show | `apiKeySource: none` | `apiKeySource: ANTHROPIC_API_KEY` |
+
+- **The gate** runs `claude --version` and `claude auth status --json` before every run, under that run's exact environment. The version must match the CLI bundled with the pinned SDK, because the fields were measured on it. A failure records `launch_failed` and starts nothing.
+- **What it proves:** which credential the CLI would use. **What it does not prove:** that the credential works. An expired login still reads as logged in, so the run then fails at its first request.
+- **`apiKeySource: none` alone proves nothing**, because it also covers bearer tokens and cloud providers. `system/init` and `rate_limit_event` arrive after the first model request, so they confirm a run or stop it, but cannot prevent it from starting. Only subscription runs have shown `rate_limit_event` (27 events in the 23 baseline runs, 0 in the 6 API-key runs).
+- **Configuration that can select API billing:** the `apiKeyHelper` setting, an `env` block in settings, a stored `/login` key, and managed settings. The gate reads these through the CLI and refuses them. It also refuses them from user settings, which `--setting-sources project` would not load, so it is stricter than the run needs. A login beside a stored key still reports `authMethod: claude.ai`, so `apiKeySource` must be absent as well.
+- **Output handling:** `auth status` can print the account email and organization. Only allowlisted fields are parsed and kept, and the run record has no field for anything else.
+- **Cost:** Claude Pro usage is subject to the plan's limits. **If extra usage is enabled on the account, a run can be charged.** The watcher stops a run when the stream reports extra usage, but that is after a request. Nothing here guarantees zero cost, so keep extra usage off for evaluations. Reported dollar figures are estimates, and `--max-budget-usd` is unverified under a subscription.
+- **Scope:** subscription mode is for the owner's personal, local evaluations through the unmodified CLI. It takes no tokens as input and reads no credential file.
+
+**CLI and SDK boundaries differ.** Compare runs only within one harness and one authentication mode.
+
+| | CLI harness | SDK harness |
+|---|---|---|
+| Investigator | Forked subagent under a main session | Main-thread agent |
+| Tools in the session | 31: built-ins such as `Bash` and `Write` are in the main session's pool, and the subagent is limited to the five MarketMind tools | Exactly the five MarketMind tools |
+| Skills, plugins, agents | Built-ins present; anything beyond the recorded set stops the run | None |
+| Pre-run tool check | None: `init` arrives after the first request | Two validation phases, the first before the prompt |
+| Per-call guard | None; `permissions` rules and the subagent allowlist | PreToolUse deny-only guard |
+| After the run | D2, D3, D4 and D4b grade what happened | D2, D3, D4 and D18 |
+
+The CLI harness detects a wider pool rather than preventing one: `initProblems` stops a run that shows an unknown tool, agent, skill, plugin or MCP server, or a permission mode other than `default`. It compares with the session recorded in the 23 baseline runs on the pinned CLI.
+
 **How each run is isolated.**
 - A new temp project holds only copies of the agent, the skill and `settings.json`. The main session therefore cannot read sources, golden files or rubrics.
 - The copied settings are passed with `--settings`, because project permission rules are not applied in the fresh, untrusted temp folder. This was observed in the Stage 2.5 trial.
 - Other flags: `--strict-mcp-config`, `--setting-sources project`, `--permission-mode default`, `stream-json --verbose --forward-subagent-text` and `--no-session-persistence`.
+- The MCP server starts through `agent-sdk/mcp-launcher.mjs`, as in the SDK harness, so no credential or home directory reaches it. Runs recorded before Stage 2.7 started it directly.
 
 **Budget and cleanup.**
 - A run is not started if the estimated spend in the directory, plus the per-run cap, would exceed the total. An unknown cost counts at the cap.

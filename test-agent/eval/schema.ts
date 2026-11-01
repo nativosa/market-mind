@@ -2,6 +2,7 @@
 // (written by the grader), human review (filled in by a person) and the scorecard.
 import { z } from "zod";
 import { PolicyVersion } from "../../agent-sdk/policy.js";
+import { AuthMode, AuthRecord } from "../cliAuth.js";
 import { Reliability } from "./reliability.js";
 import { RUBRIC_SET, RUBRIC_SET_V1 } from "./scenarios.js";
 
@@ -45,6 +46,8 @@ export const RunExecution = z
     mode: ExecutionMode,
     /** trace.jsonl (Claude Code stream-json) or execution.json (marketmind.agent.execution/1). */
     artifact: z.enum(["trace.jsonl", "execution.json"]),
+    /** Absent in runs from before authentication modes. */
+    auth: AuthRecord.optional(),
   })
   .strict();
 
@@ -172,7 +175,7 @@ export const EvalResult = z
     claudeCodeVersion: z.string().nullable(),
     /** Execution provenance: never mixed; agent-sdk events are normalized, not presented as stream-json. */
     execution: z
-      .object({ mode: ExecutionMode, source: z.enum(["claude-cli-stream-json", "agent-sdk"]).nullable(), sdkVersion: z.string().nullable(), optionsDigest: z.string().nullable() })
+      .object({ mode: ExecutionMode, source: z.enum(["claude-cli-stream-json", "agent-sdk"]).nullable(), sdkVersion: z.string().nullable(), optionsDigest: z.string().nullable(), authMode: AuthMode.optional() })
       .strict(),
     models: z.object({ main: z.string().nullable(), subagent: z.array(z.string()) }).strict(),
     executedAt: z.string().nullable(),

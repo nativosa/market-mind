@@ -1,7 +1,11 @@
 // Bounded real-agent evaluation runner (manual; uses model quota; never part of CI).
 //
-//   npx tsx test-agent/run.ts --scenario S01[,S03] | --all [--repeat N] [--out <dir>]
+//   npx tsx test-agent/run.ts --scenario S01[,S03] | --all --auth subscription|api-key [--repeat N] [--out <dir>]
 //        [--max-budget-usd 0.40] [--total-budget-usd 3] [--timeout-ms 300000] [--harness cli|sdk]
+//   npx tsx test-agent/run.ts --auth subscription|api-key --auth-check   # the gate only: no model request
+//
+// --auth is required for the CLI harness and never inferred from the shell (cliAuth.ts). Every CLI run gets an
+// explicit environment, and starts only after `claude auth status` positively names the requested credential.
 //
 // --harness sdk runs the Stage 2.6 Agent SDK application (agent-sdk/) instead of `claude -p`, only for the
 // approved subset and the P01 permission probe (sdkRun.ts SDK_ALLOWED), never with --all, and only with ANTHROPIC_API_KEY set (an API key
@@ -18,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { authModeFor, authPreflight, AuthUsageError, cliEnv, mcpConfig, serverEnvProblems, StreamWatch, type AuthMode, type Preflight } from "./cliAuth.js";
 import { evaluateDir, historicalArtifacts, historicalMessage, LAUNCHED, runKeyOf } from "./eval/evaluate.js";
 import { promptFor, SCENARIO_SET, SCENARIOS, scenarioById, type EvalScenario } from "./eval/scenarios.js";
 import { RUN_CONTRACT, RunMeta, stableJson } from "./eval/schema.js";
@@ -26,6 +31,8 @@ import { parseExecution } from "./eval/sdkTrace.js";
 import { parseTrace } from "./eval/trace.js";
 import { FIXTURE_REVISION, fixtureDigest, seedEvalDb } from "./fixtures.js";
 import { realDeps } from "../agent-sdk/cli.js";
+import { MCP_LAUNCHER } from "../agent-sdk/options.js";
+import { readLauncherReports } from "../agent-sdk/session.js";
 import { probeFailures, runSdkOne, SDK_ALLOWED } from "./sdkRun.js";
 import { INVESTIGATOR_FILES, investigator, killTree, processesTagged, REPO, repoState, sha256, treeHash } from "./processes.js";
 
@@ -36,6 +43,7 @@ interface Options {
   maxBudgetUsd: number;
   totalBudgetUsd: number;
   timeoutMs: number;
+  auth: AuthMode;
 }
 
 function launched(out: string): { runs: { runKey: string; scenarioId: string; repetition: number; launchedAt: string }[] } {
@@ -79,9 +87,16 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
     const db = join(work, s.db === "missing" ? "absent.sqlite" : "agent-fixtures.sqlite");
     // The digest always covers the full fixture revision (seeded separately when the scenario's database is missing).
     const digest = fixtureDigest(s.db === "missing" ? seedEvalDb(join(work, "digest-only.sqlite")) : seedEvalDb(db));
-    const mcpConfig = join(work, "mcp-eval.json");
-    writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { marketmind: { type: "stdio", command: process.execPath, args: [join(REPO, "test-agent", "scenario-mcp.mjs"), `--eval-tag=${tag}`], env: { MARKETMIND_DB: db } } } }));
+    const mcpConfigPath = join(work, "mcp-eval.json");
+    const launchReport = join(work, "mcp-launcher.jsonl");
+    writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig(MCP_LAUNCHER, join(REPO, "test-agent", "scenario-mcp.mjs"), tag, db, launchReport)));
     const prompt = promptFor(s);
+    const isolatedHome = join(work, "home");
+    mkdirSync(join(isolatedHome, ".claude"), { recursive: true });
+    const env = cliEnv(o.auth, process.env, isolatedHome);
+    // The gate: under the exact environment of this run, before anything can reach a model.
+    const gate: Preflight = authPreflight(o.auth, env, project);
+    const watch = new StreamWatch(o.auth);
     // Project permission rules are not applied in the fresh (untrusted) temp project, so the copied
     // investigator settings file is passed explicitly; the probe without allow rules passes none.
     const settingsFlag = s.withoutAllowRules ? [] : ["--settings", join(project, INVESTIGATOR_FILES.settings)];
@@ -106,10 +121,22 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
     let stdout = "";
     let stderr = "";
     let timedOut = false;
-    let launchError: string | null = null;
+    let launchError: string | null = gate.passed ? null : `authentication gate: ${gate.problems.join("; ")}`;
     const exit = await new Promise<{ code: number | null; signal: string | null }>((done) => {
-      const child = spawn("claude", ["-p", prompt, "--mcp-config", mcpConfig, ...settingsFlag, ...flags], { cwd: project, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
-      child.stdout.on("data", (d: Buffer) => (stdout += d.toString("utf8")));
+      if (!gate.passed) {
+        done({ code: null, signal: null });
+        return;
+      }
+      const child = spawn("claude", ["-p", prompt, "--mcp-config", mcpConfigPath, ...settingsFlag, ...flags], { cwd: project, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+      child.stdout.on("data", (d: Buffer) => {
+        const text = d.toString("utf8");
+        stdout += text;
+        const stop = watch.feed(text);
+        if (stop && !launchError) {
+          launchError = `stopped: ${stop}`;
+          if (child.pid) killTree(child.pid);
+        }
+      });
       child.stderr.on("data", (d: Buffer) => (stderr += d.toString("utf8")));
       const timer = setTimeout(() => {
         timedOut = true;
@@ -132,9 +159,16 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
     writeFileSync(join(dir, "trace.jsonl"), stdout);
     writeFileSync(join(dir, "stderr.txt"), stderr);
     const after = { db: dbHash(), repo: repoState(), project: treeHash(project) };
+    const launcher = readLauncherReports(launchReport);
+    const authProblems = !gate.passed ? gate.problems : [...watch.finish(), ...launcher.problems, ...serverEnvProblems(launcher.reports)];
+    launchError ??= gate.passed && authProblems.length > 0 ? `not confirmed: ${authProblems.join("; ")}` : null;
     const meta = RunMeta.parse({
       contract: RUN_CONTRACT,
-      execution: { mode: "claude-cli", artifact: "trace.jsonl" },
+      execution: {
+        mode: "claude-cli",
+        artifact: "trace.jsonl",
+        auth: { mode: o.auth, preflight: gate.evidence, cliVersion: gate.cliVersion, initApiKeySource: watch.initApiKeySource, rateLimitEventSeen: watch.rateLimitEventSeen, overageUsed: watch.overageUsed, problems: authProblems },
+      },
       runKey,
       scenarioId: s.id,
       scenarioSet: SCENARIO_SET,
@@ -158,7 +192,7 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
     writeFileSync(join(dir, "run.json"), stableJson(meta));
     const t = parseTrace(stdout);
     console.log(
-      `${runKey}: exit ${exit.code}${timedOut ? " TIMEOUT" : ""}, ${t.calls.filter((c) => c.scope === "subagent").length} subagent calls, cost $${t.result?.costUsd ?? "?"}, ${Math.round((Date.now() - started) / 1000)} s` +
+      `${runKey}: exit ${exit.code}${timedOut ? " TIMEOUT" : ""}, ${t.calls.filter((c) => c.scope === "subagent").length} subagent calls, cost $${t.result?.costUsd ?? "?"}, ${Math.round((Date.now() - started) / 1000)} s${launchError ? `, ${String(launchError)}` : ""}` +
         (orphans.length ? `, orphans killed ${orphans.length - remaining.length}/${orphans.length}` : ""),
     );
   } catch (error) {
@@ -174,11 +208,50 @@ function option(name: string): string | undefined {
   return i > 0 ? process.argv[i + 1] : undefined;
 }
 
+/** The gate alone: no prompt, no model request. Prints allowlisted fields only. */
+function authCheck(mode: AuthMode): void {
+  const work = mkdtempSync(join(tmpdir(), "mm-auth-check-"));
+  try {
+    const home = join(work, "home");
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    const p = authPreflight(mode, cliEnv(mode, process.env, home), work);
+    console.log(JSON.stringify(p, null, 2));
+    process.exitCode = p.passed ? 0 : 1;
+  } finally {
+    rmSync(work, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  }
+}
+
 async function main(): Promise<void> {
+  const harnessName = option("--harness") ?? "cli";
+  if (harnessName !== "cli" && harnessName !== "sdk") {
+    console.error("--harness must be cli or sdk");
+    process.exit(2);
+  }
+  let auth: AuthMode;
+  try {
+    auth = authModeFor(harnessName, option("--auth"));
+  } catch (e) {
+    if (!(e instanceof AuthUsageError)) throw e;
+    console.error(e.message);
+    process.exit(2);
+  }
+  if (auth === "api-key" && !process.env.ANTHROPIC_API_KEY) {
+    console.error("--auth api-key needs ANTHROPIC_API_KEY (a Claude Console API key); nothing was started");
+    process.exit(2);
+  }
+  if (process.argv.includes("--auth-check")) {
+    if (harnessName !== "cli") {
+      console.error("--auth-check applies to the CLI harness");
+      process.exit(2);
+    }
+    authCheck(auth);
+    return;
+  }
   const ids = process.argv.includes("--all") ? SCENARIOS.filter((s) => s.kind === "golden").map((s) => s.id) : (option("--scenario") ?? "").split(",").filter(Boolean);
   const scenarios = ids.map((id) => scenarioById(id));
   if (scenarios.length === 0 || scenarios.some((s) => !s)) {
-    console.error(`usage: npx tsx test-agent/run.ts --scenario <${SCENARIOS.map((s) => s.id).join("|")}>[,...] | --all [--repeat N] [--out <dir>] [--max-budget-usd 0.40] [--total-budget-usd 3] [--timeout-ms 300000]`);
+    console.error(`usage: npx tsx test-agent/run.ts --auth subscription|api-key --scenario <${SCENARIOS.map((s) => s.id).join("|")}>[,...] | --all [--harness cli|sdk] [--repeat N] [--out <dir>] [--max-budget-usd 0.40] [--total-budget-usd 3] [--timeout-ms 300000]`);
     process.exit(2);
   }
   const o: Options = {
@@ -186,21 +259,14 @@ async function main(): Promise<void> {
     maxBudgetUsd: Number(option("--max-budget-usd") ?? "0.40"),
     totalBudgetUsd: Number(option("--total-budget-usd") ?? "3"),
     timeoutMs: Number(option("--timeout-ms") ?? "300000"),
+    auth,
   };
   const repeat = Number(option("--repeat") ?? "1");
-  const harness = option("--harness") ?? "cli";
-  if (harness !== "cli" && harness !== "sdk") {
-    console.error("--harness must be cli or sdk");
-    process.exit(2);
-  }
+  const harness = harnessName;
   if (harness === "sdk") {
     const outside = (scenarios as EvalScenario[]).filter((s) => !SDK_ALLOWED.includes(s.id));
     if (process.argv.includes("--all") || outside.length > 0) {
       console.error(`--harness sdk runs only the approved subset and probe ${SDK_ALLOWED.join(",")} (never --all)`);
-      process.exit(2);
-    }
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.error("--harness sdk needs ANTHROPIC_API_KEY (a Claude Console API key); nothing was started");
       process.exit(2);
     }
   }

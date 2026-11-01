@@ -18,7 +18,7 @@ const Result = z.object({
   scenarioId: z.string(),
   graderRevision: z.string().optional(),
   claudeCodeVersion: z.string().nullable(),
-  execution: z.object({ mode: z.string(), sdkVersion: z.string().nullable(), optionsDigest: z.string().nullable() }).passthrough().optional(),
+  execution: z.object({ mode: z.string(), sdkVersion: z.string().nullable(), optionsDigest: z.string().nullable(), authMode: z.string().optional() }).passthrough().optional(),
   models: z.object({ main: z.string().nullable(), subagent: z.array(z.string()) }),
   investigator: z.object({ agentSha256: z.string(), skillSha256: z.string(), settingsSha256: z.string() }).passthrough().nullable(),
   fixture: z.object({ recordedDigest: z.string().nullable() }).passthrough(),
@@ -42,6 +42,7 @@ export interface RunSummary {
   runKey: string;
   scenarioId: string;
   mode: string;
+  authMode: string;
   graderRevision: string;
   claudeCodeVersion: string | null;
   sdkVersion: string | null;
@@ -89,6 +90,7 @@ export function summarizeDir(dir: string): RunSummary[] {
       runKey: r.runKey,
       scenarioId: r.scenarioId,
       mode,
+      authMode: r.execution?.authMode ?? "not recorded",
       graderRevision: r.graderRevision ?? "eval-graders/1",
       claudeCodeVersion: r.claudeCodeVersion,
       sdkVersion: r.execution?.sdkVersion ?? null,
@@ -126,6 +128,7 @@ const mean = (xs: (number | null)[]) => {
 
 const CONFOUNDERS: [string, (r: RunSummary) => unknown][] = [
   ["execution mode", (r) => r.mode],
+  ["authentication mode", (r) => r.authMode],
   ["SDK version", (r) => r.sdkVersion],
   ["Claude Code version", (r) => r.claudeCodeVersion],
   ["investigator model", (r) => r.investigatorModel],

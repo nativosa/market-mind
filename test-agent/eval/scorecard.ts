@@ -9,7 +9,7 @@ import { ALLOWED_TOOLS, GRADER_CHANGES, GRADER_REVISION } from "./graders.js";
 
 /** Scorecard semantics, separate from grading: no check, verdict or result.json changes with these. */
 export const SCORECARD_CHANGES = [
-  "scorecard/5: adds a reliability section with counts per rule and status over golden runs. Those counts are not metrics or verdicts, and every metric from scorecard/4 is unchanged.",
+  "scorecard/5: adds a reliability section with counts per rule and status over golden runs. Those counts are not metrics or verdicts, and every metric from scorecard/4 is unchanged. It also lists authentication modes as a confounder.",
   "scorecard/4: tool-call metrics follow the execution mode. The investigator is the forked subagent in claude-cli runs and the main thread in agent-sdk runs, where every recorded call counts because a nested call is never legitimate. delegation covers claude-cli runs only (agent-sdk runs are excluded, since nothing is delegated) and the new mainThreadIdentity reports D2 for agent-sdk runs. claude-cli numerators and denominators are unchanged. Scorecards written before this undercount agent-sdk runs: mean MarketMind calls 0, authorizedToolUse n/a, and delegation 100% from D2 identity results.",
 ];
 
@@ -186,6 +186,7 @@ export function buildScorecard(all: EvalResult[]) {
     executionModes: distinct(results.map((r) => r.execution.mode)),
     sdkVersions: distinct(results.map((r) => r.execution.sdkVersion)),
     harnessDigests: distinct(results.map((r) => r.execution.optionsDigest)),
+    authModes: distinct(results.map((r) => r.execution.authMode ?? "not recorded")),
     claudeCodeVersions: distinct(results.map((r) => r.claudeCodeVersion)),
     subagentModels: distinct(results.map((r) => r.models.subagent.join("+"))),
     mainModels: distinct(results.map((r) => r.models.main)),

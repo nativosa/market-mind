@@ -529,7 +529,7 @@ A small, reproducible evaluation of the unchanged v0.5.0 investigator. The full 
 
 ```bash
 npm test                                              # offline layer (no Claude, no key, no network)
-npx tsx test-agent/run.ts --all                       # opt-in: 12 real investigations (bounded budget)
+npx tsx test-agent/run.ts --auth subscription --all   # opt-in: 12 real investigations (bounded budget)
 npx tsx test-agent/eval/evaluate.ts <outDir>          # re-grade recorded runs offline
 npx tsx test-agent/eval/evaluate.ts <outDir> --output <newDir>   # re-grade older artifacts; the recorded directory is only read
 ```
@@ -597,7 +597,7 @@ npm run verify      # typecheck + lint + coverage
 npm run smoke       # OPT-IN live smoke test against public endpoints
 npx tsx test-agent/eval/baselineArchive.ts verify   # offline: needs the local v0.5.0 archive (docs/evaluation-archive/)
 npm run agent -- investigate --market-id 900103 --fixture S03 --dry-run   # no credentials, no spawn, no API call
-npx tsx test-agent/run.ts --all        # OPT-IN real-agent evaluation (uses Claude Code model quota)
+npx tsx test-agent/run.ts --auth subscription --all   # OPT-IN real-agent evaluation (uses Claude Code usage; extra usage can be charged if enabled)
 ```
 
 The live smoke tests run Stage 1 inspection and a 3-market scan separately for v1 and v2. They also run a 3-market v1 `collect` into a **temporary** database (deleted afterwards), followed by offline `history`/`runs` queries. Finally, they start the real MCP server process and call `scan_markets` and `inspect_market` over stdio, with the server itself capping the process at 12 attempts. Each run allows at most **12 HTTP requests**, every request counted, including market-detail lookups. Each run reports one of four results:

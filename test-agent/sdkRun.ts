@@ -122,7 +122,7 @@ export async function runSdkOne(s: EvalScenario, repetition: number, o: SdkRunOp
   const notStarted = r.status === "missing_credentials" || r.status === "invalid_options";
   const meta = RunMeta.parse({
     contract: RUN_CONTRACT,
-    execution: { mode: "agent-sdk", artifact: "execution.json" },
+    execution: { mode: "agent-sdk", artifact: "execution.json", auth: { mode: "api-key" } },
     runKey,
     scenarioId: s.id,
     scenarioSet: SCENARIO_SET,

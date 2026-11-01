@@ -662,7 +662,7 @@ export async function gradeRun(input: GradeInput): Promise<EvalResult> {
     fixture: { revision: meta?.fixtureRevision ?? null, recordedDigest: meta?.fixtureDigest ?? null, currentDigest: golden.fixtureDigest, match: digestMatch },
     investigator: meta?.investigator ?? null,
     claudeCodeVersion: trace?.init?.claudeCodeVersion ?? null,
-    execution: { mode: sdkMode || executionOf(meta) === "agent-sdk" ? "agent-sdk" : "claude-cli", source: trace?.source ?? null, sdkVersion: trace?.sdk?.sdkVersion ?? null, optionsDigest: trace?.sdk?.optionsDigest ?? null },
+    execution: { mode: sdkMode || executionOf(meta) === "agent-sdk" ? "agent-sdk" : "claude-cli", source: trace?.source ?? null, sdkVersion: trace?.sdk?.sdkVersion ?? null, optionsDigest: trace?.sdk?.optionsDigest ?? null, ...(meta?.execution?.auth ? { authMode: meta.execution.auth.mode } : {}) },
     models: { main: trace?.init?.mainModel ?? null, subagent: trace?.subagent.models ?? [] },
     executedAt: meta?.executedAt ?? null,
     graderRevision: GRADER_REVISION,
