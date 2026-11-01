@@ -30,6 +30,9 @@ The investigator under test is the committed v0.5.0 files, which the runner hash
 | `eval/baselineArchive.ts` | Verifies the preserved v0.5.0 baseline against its committed manifest, then regrades it into a temporary directory |
 | `run.ts` | The real-agent runner (`--harness cli` default, or `--harness sdk`) |
 | `live.ts` | One bounded investigation of one real market on a Claude subscription. A demonstration, not part of the evaluation (see "Live investigation") |
+| `experiment.ts` | The Stage 2.7 paired comparison of `policy-v1` and `policy-v2` (see "Policy comparison") |
+| `policySource.ts` | Loads a registered policy from an exact commit, by version only, and verifies its complete hashes |
+| `eval/pairs.ts` | Paired report for a comparison directory: every expected pair, the expansion gate and the frozen criteria. Reads results and never grades |
 | `cliAuth.ts` | Explicit authentication and the tool boundary for the CLI harness: environment, flags, pre-run gate and stream checks |
 | `sdkRun.ts` | One agent-sdk run in the evaluation layout |
 | `processes.ts` | Shared hashing and process-tree cleanup helpers |
@@ -243,6 +246,25 @@ Runs recorded before this change had 31 tools in the main session pool. They are
 - Costs are Claude Code's list-price estimates (`costBasis`), not billing.
 - Elevated parent permission modes (`bypassPermissions`, `auto`, `acceptEdits`) are **not** evaluated. They need an isolated, disposable environment.
 - **Re-grading the v0.5.0 baseline under v0.6.0 with eval-graders/2 or /3 fails D9** on the envelope `appVersion` alone (0.5.0 recorded, 0.6.0 replayed). eval-graders/4 fixes this (see above); the recorded baseline results are unchanged.
+
+## Policy comparison
+
+`experiment.ts` compares `policy-v1` with `policy-v2` under the design frozen in [`docs/stage-2.7-experiment.md`](../docs/stage-2.7-experiment.md). It uses model quota, and each of the pilot and the expansion needs explicit approval.
+
+```bash
+npx tsx test-agent/experiment.ts --auth subscription --out .eval-out/<name> --repetitions 1 --max-budget-usd 0.40 --total-budget-usd 2 --check   # no model request
+npx tsx test-agent/experiment.ts --auth subscription --out .eval-out/<name> --repetitions 1 --max-budget-usd 0.40 --total-budget-usd 2         # the pilot: 10 runs
+npx tsx test-agent/eval/pairs.ts .eval-out/<name>                                                                                                 # read the report again
+```
+
+- **Fixed:** the scenarios (S01, S02, S03, S09, S10), the arms, subscription authentication and `eval-graders/7`. There is no option for a policy, a scenario, an agent file or a harness.
+- **Policies:** loaded by version from an exact commit, never from the working tree, and refused unless all three files match their registered hashes. `run.ts` and `live.ts` have no policy option.
+- **One code path:** every run goes through `run.ts`'s `runOne`, so both arms get the same gate, environment, flags, stream watch and fixture server.
+- **Layout:** `<out>/experiment.json`, `<out>/policy-v1/S01-r1/`, `<out>/policy-v2/S01-r1/`, `<out>/pairs.{json,md}`. Each arm is an ordinary evaluation directory, graded by `evaluate.ts`.
+- **Refused before anything is written:** a dirty tree, a failed gate, a policy that fails verification, an arm allowing anything but the five tools, and any existing directory for a pilot. An expansion also needs the pilot's unchanged manifest, so another commit, grader, fixture or per-run budget is refused.
+- **Stops:** a failed or timed-out run, or a run that could exceed the total, ends the sequence. What was made is graded and kept, and the command exits 1.
+- **Nothing resumes:** an interrupted pilot stays as it stopped, and no arm or run can be rerun. `--repetitions 3` adds r2 and r3 once, only if the pilot's frozen gate is met, and that gate compares nothing between the arms. A restart is a new, approved pilot in a new directory.
+- **Re-reading a directory:** run `evaluate.ts` on each arm, for example after a human review, then `eval/pairs.ts`. Neither launches anything.
 
 ## Live investigation
 

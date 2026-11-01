@@ -5,6 +5,9 @@
 //   node test/stubApi.mjs <logFile> <portFile> <scriptJson>
 //
 // scriptJson: { "main": [{ "name", "input" }...], "investigator": [...], "report": "text" }, one tool call per turn, then text.
+// With "routes": [{ "match", "system"?, "investigator", "report" }], one stub serves many sessions: a route applies when
+// the first user message contains `match` and the system prompt contains `system`, and the turn is the number of tool
+// results in the request. The first route that applies wins.
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 
@@ -41,10 +44,14 @@ const server = createServer((req, res) => {
     const request = JSON.parse(body);
     const system = typeof request.system === "string" ? request.system : (request.system ?? []).map((s) => s.text ?? "").join("\n");
     const session = system.includes("MarketMind market investigator") ? "investigator" : "main";
-    appendFileSync(logFile, `${JSON.stringify({ session, model: request.model, tools: (request.tools ?? []).map((t) => t.name) })}\n`);
-    const step = (script[session] ?? [])[turns[session]++];
+    appendFileSync(logFile, `${JSON.stringify({ session, model: request.model, tools: (request.tools ?? []).map((t) => t.name), system })}\n`);
+    const first = JSON.stringify(request.messages?.[0] ?? "");
+    const route = (script.routes ?? []).find((r) => first.includes(r.match) && (r.system === undefined || system.includes(r.system)));
+    const turn = route ? (JSON.stringify(request.messages).match(/"tool_result"/g) ?? []).length : turns[session]++;
+    const plan = route ?? script;
+    const step = (plan[session] ?? [])[turn];
     if (step) reply(res, request.model, { type: "tool_use", id: `toolu_${++id}`, name: step.name, input: step.input ?? {} }, "tool_use");
-    else reply(res, request.model, { type: "text", text: script.report ?? `stub report (${session})` }, "end_turn");
+    else reply(res, request.model, { type: "text", text: plan.report ?? `stub report (${session})` }, "end_turn");
   });
 });
 server.listen(0, "127.0.0.1", () => writeFileSync(portFile, String(server.address().port)));

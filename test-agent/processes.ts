@@ -30,8 +30,9 @@ export function treeHash(dir: string): string {
   return sha256(parts.join("\n"));
 }
 
-export function investigator(): RunMeta["investigator"] {
-  const hash = (p: string) => sha256(readFileSync(join(REPO, p)));
+/** Identity of the investigator files `read` returns: the repository's, or what a run was actually given. */
+export function investigator(read: (path: string) => Buffer = (p) => readFileSync(join(REPO, p))): RunMeta["investigator"] {
+  const hash = (p: string) => sha256(read(p));
   const baseline = (p: string) => {
     const r = spawnSync("git", ["show", `${BASELINE_TAG}:${p}`], { cwd: REPO });
     return r.status === 0 ? sha256(r.stdout) : null;

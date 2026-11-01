@@ -17,11 +17,12 @@
 // mode. The runner records the trace and run metadata, then grades everything offline (eval/evaluate.ts).
 // It stops before a run that could exceed the total budget, kills the whole process tree on timeout and
 // sweeps for orphaned fixture servers.
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { authModeFor, authPreflight, AuthUsageError, cliEnv, cliFlags, mcpConfig, serverEnvProblems, StreamWatch, type AuthMode, type Preflight } from "./cliAuth.js";
 import { evaluateDir, historicalArtifacts, historicalMessage, LAUNCHED, runKeyOf } from "./eval/evaluate.js";
 import { promptFor, SCENARIO_SET, SCENARIOS, scenarioById, type EvalScenario } from "./eval/scenarios.js";
@@ -34,25 +35,32 @@ import { realDeps } from "../agent-sdk/cli.js";
 import { MCP_LAUNCHER } from "../agent-sdk/options.js";
 import { readLauncherReports } from "../agent-sdk/session.js";
 import { probeFailures, runSdkOne, SDK_ALLOWED } from "./sdkRun.js";
+import type { LoadedPolicy } from "./policySource.js";
 import { INVESTIGATOR_FILES, investigator, killTree, processesTagged, REPO, repoState, sha256, treeHash } from "./processes.js";
 
 export { BASELINE_TAG, INVESTIGATOR_FILES } from "./processes.js";
 
-interface Options {
+export interface Options {
   out: string;
   maxBudgetUsd: number;
   totalBudgetUsd: number;
   timeoutMs: number;
   auth: AuthMode;
+  /** experiment.ts only: the verified policy to install in the temp project instead of the repository's files. */
+  policy?: LoadedPolicy;
+  /** Offline tests only: a stand-in for the authentication gate. */
+  gate?: typeof authPreflight;
+  /** Offline tests only: a stand-in for the Claude CLI. */
+  spawnCli?: (args: string[], o: { cwd: string; env: Record<string, string> }) => ChildProcess;
 }
 
-function launched(out: string): { runs: { runKey: string; scenarioId: string; repetition: number; launchedAt: string }[] } {
+export function launched(out: string): { runs: { runKey: string; scenarioId: string; repetition: number; launchedAt: string }[] } {
   const p = join(out, LAUNCHED);
   return existsSync(p) ? (JSON.parse(readFileSync(p, "utf8")) as ReturnType<typeof launched>) : { runs: [] };
 }
 
 /** Estimated usage already recorded in this output directory (unknown costs count at their cap). */
-function spentSoFar(out: string, cap: number): number {
+export function spentSoFar(out: string, cap: number): number {
   return launched(out).runs.reduce((sum, r) => {
     const trace = join(out, r.runKey, "trace.jsonl");
     const execution = join(out, r.runKey, "execution.json");
@@ -65,7 +73,7 @@ function spentSoFar(out: string, cap: number): number {
   }, 0);
 }
 
-async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<void> {
+export async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<void> {
   const runKey = runKeyOf(s.id, repetition);
   const dir = join(o.out, runKey);
   mkdirSync(dir, { recursive: true });
@@ -82,8 +90,12 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
     const files = s.withoutAllowRules ? [INVESTIGATOR_FILES.agent, INVESTIGATOR_FILES.skill] : Object.values(INVESTIGATOR_FILES);
     for (const f of files) {
       mkdirSync(dirname(join(project, f)), { recursive: true });
-      copyFileSync(join(REPO, f), join(project, f));
+      if (o.policy) writeFileSync(join(project, f), o.policy.files[f]!);
+      else copyFileSync(join(REPO, f), join(project, f));
     }
+    // Hashed from the files the run was given, so the record cannot describe anything else.
+    const policy = o.policy ? investigator((f) => readFileSync(join(project, f))) : investigator();
+    if (o.policy && policy.policyVersion !== o.policy.version) throw new Error(`the temp project holds ${policy.policyVersion}, not ${o.policy.version}`);
     const db = join(work, s.db === "missing" ? "absent.sqlite" : "agent-fixtures.sqlite");
     // The digest always covers the full fixture revision (seeded separately when the scenario's database is missing).
     const digest = fixtureDigest(s.db === "missing" ? seedEvalDb(join(work, "digest-only.sqlite")) : seedEvalDb(db));
@@ -95,7 +107,7 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
     mkdirSync(join(isolatedHome, ".claude"), { recursive: true });
     const env = cliEnv(o.auth, process.env, isolatedHome);
     // The gate: under the exact environment of this run, before anything can reach a model.
-    const gate: Preflight = authPreflight(o.auth, env, project);
+    const gate: Preflight = (o.gate ?? authPreflight)(o.auth, env, project);
     const watch = new StreamWatch(o.auth);
     // Project permission rules are not applied in the fresh (untrusted) temp project, so the copied
     // investigator settings file is passed explicitly; the probe without allow rules passes none.
@@ -113,8 +125,10 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
         done({ code: null, signal: null });
         return;
       }
-      const child = spawn("claude", ["-p", prompt, "--mcp-config", mcpConfigPath, ...settingsFlag, ...flags], { cwd: project, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
-      child.stdout.on("data", (d: Buffer) => {
+      const child: ChildProcess = o.spawnCli
+        ? o.spawnCli(["-p", prompt, "--mcp-config", mcpConfigPath, ...settingsFlag, ...flags], { cwd: project, env })
+        : spawn("claude", ["-p", prompt, "--mcp-config", mcpConfigPath, ...settingsFlag, ...flags], { cwd: project, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+      child.stdout?.on("data", (d: Buffer) => {
         const text = d.toString("utf8");
         stdout += text;
         const stop = watch.feed(text);
@@ -123,7 +137,7 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
           if (child.pid) killTree(child.pid);
         }
       });
-      child.stderr.on("data", (d: Buffer) => (stderr += d.toString("utf8")));
+      child.stderr?.on("data", (d: Buffer) => (stderr += d.toString("utf8")));
       const timer = setTimeout(() => {
         timedOut = true;
         if (child.pid) killTree(child.pid);
@@ -161,7 +175,7 @@ async function runOne(s: EvalScenario, repetition: number, o: Options): Promise<
       repetition,
       fixtureRevision: FIXTURE_REVISION,
       fixtureDigest: digest,
-      investigator: investigator(),
+      investigator: policy,
       prompt,
       flags: ["-p", "<prompt>", "--mcp-config", "<temp>/mcp-eval.json", ...(settingsFlag.length ? ["--settings", "<temp>/project/.claude/settings.json"] : []), ...flags],
       maxBudgetUsd: o.maxBudgetUsd,
@@ -298,4 +312,4 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();
