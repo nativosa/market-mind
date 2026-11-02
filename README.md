@@ -26,7 +26,36 @@ It also includes a bounded runner for repeated real investigations. The offline 
 
 **Stage 2.6** runs the same investigator through the official **Claude Agent SDK** in a small CLI (`agent-sdk/`). It adds API-key authentication with credential isolation, a deny-only permission guard, two-phase session validation, timeouts and cleanup, and SDK support in the evaluation framework. Five real-model synthetic investigations and a permission probe are reported in [`docs/evaluation-sdk-stage-2.6.md`](docs/evaluation-sdk-stage-2.6.md), including their known quality failures.
 
+**Stage 2.7** (v0.8.0) adds three things:
+- a revised investigator policy (`policy-v2`) and additive reliability detectors (REL-1 to REL-4);
+- a bounded investigation of one real market on your own Claude subscription (`test-agent/live.ts`), and `collect --market-id` to build that market's history;
+- a controlled, paired pilot of `policy-v1` against `policy-v2`, closed at 10 runs. Its results are descriptive only: see [Controlled pilot (Stage 2.7)](#controlled-pilot-stage-27).
+
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
+
+**What to keep in mind when reading any output:**
+- MarketMind does research only, and it **cannot place trades**. No code path can submit an order.
+- A quoted spread is the gap between resting quotes at one instant. It is **not a guaranteed profit**, and it says nothing about fills, fees or queue position.
+- Stored history is a set of **discrete observations** taken when you ran `collect`. Nothing is known about the market between them.
+- AI investigation reports are model-written. They can be wrong while citing real evidence, so **read them critically** and check them against the cited tool results.
+- Investigations through Claude Code run on your account. On Claude Pro or Max they **consume your subscription usage**, and extra usage can be charged if it is enabled.
+
+## Getting started
+
+These commands need Node.js 24.15+ and network access to the public Polymarket APIs. Each one makes only bounded read-only `GET` requests, and only `collect` writes anything: the local database.
+
+```bash
+npm ci
+npm run cli -- markets --limit 5                       # discover open markets; note a Gamma id
+npm run cli -- inspect --market-id <gammaId>            # books and metrics for one binary market
+npm run cli -- scan --max-markets 5                     # rank a bounded sample of research candidates
+npm run cli -- collect --market-id <gammaId>            # store one observation of that market (repeat later for history)
+npm run cli -- runs                                     # stored collection runs (offline)
+npm run cli -- history --market-id <gammaId>            # stored history and sample-count statistics (offline)
+npm run verify                                          # typecheck, lint and the offline test suite
+```
+
+For an AI investigation, open Claude Code in the repository, approve the `marketmind` MCP server, and type `/investigate-market <gammaId>`. See [Setup with Claude Code](#setup-with-claude-code). It uses your Claude usage.
 
 ## Requirements
 
@@ -577,6 +606,42 @@ See [`agent-sdk/README.md`](agent-sdk/README.md) for the security model and for 
 
 The tools the injection test asks for were never offered, so that result shows the boundary working rather than general injection resistance. Results are synthetic and small-sample, say nothing about statistical reliability, and are not evidence of profitable trading. Read [`docs/evaluation-sdk-stage-2.6.md`](docs/evaluation-sdk-stage-2.6.md).
 
+## Live investigation on a Claude subscription (Stage 2.7)
+
+`test-agent/live.ts` runs one bounded investigation of one real, open market through the unmodified Claude Code CLI, signed in with your own Claude subscription. It is a demonstration, not part of the evaluation, and it is never graded.
+
+```bash
+npm run cli -- collect --market-id <gammaId>        # optional, repeat over time: gives the investigator stored history
+npx tsx test-agent/live.ts --auth subscription --market-id <gammaId> --max-budget-usd 0.40 --out .live-out/<name> --check   # gate only, no model request
+npx tsx test-agent/live.ts --auth subscription --market-id <gammaId> --max-budget-usd 0.40 --out .live-out/<name>
+```
+
+- **Usage:** a real run consumes your subscription usage. Keep extra usage off. `--max-budget-usd` is a client-side estimate and is unverified under a subscription.
+- **Boundary:** the session offers exactly the five MarketMind tools (`--tools ""`, `--disallowedTools`, `--strict-mcp-config`). The server caps the process at 16 HTTP attempts and refuses synthetic data.
+- **Before it starts:** a committed, clean tree and the authentication gate. `--out` must be a new directory under `.live-out/`, which Git ignores.
+- **Output:** `report.md`, `run.json`, and the raw `trace.jsonl` and `stderr.txt`, which hold local paths and session ids. Never publish the raw files.
+- **After the session:** checks confirm where each piece of evidence came from and that the report is well formed. They do not confirm that the report is accurate.
+
+The full runbook is in [`test-agent/README.md`](test-agent/README.md#live-investigation).
+
+## Controlled pilot (Stage 2.7)
+
+The investigator shipped in `.claude/` since commit `5f4065c` is `policy-v2`. It was written to reduce four report defects that the REL rules detect: abbreviated identifiers, derived claims tagged as facts, undisclosed sampling, and negative executability claims. A pre-registered, paired comparison with `policy-v1` (the v0.5.0–v0.7.0 investigator) was designed in [`docs/stage-2.7-experiment.md`](docs/stage-2.7-experiment.md). It ran as a 10-run pilot, and the owner closed it there on 2026-11-02.
+
+| Result, 5 synthetic scenarios, 1 run per policy | `policy-v1` | `policy-v2` |
+|---|---|---|
+| Strict classification | 5 of 5 | 5 of 5 |
+| Correct abstention (S02, S09, S10) | 3 of 3 | 3 of 3 |
+| Runs outside the runtime restrictions | 0 of 5 | 0 of 5 |
+| REL-1 `VIOLATION` (abbreviated identifiers) | 3 of 5 | 0 of 5 |
+| REL-2 `VIOLATION` (evidence tagging) | 0 of 5 | 1 of 5 (S10) |
+
+**How to read it.**
+- Every row is **descriptive**. The acceptance criteria are defined on 15 pairs. Five pairs show no statistically demonstrated difference, and not all adoption criteria were met: the REL-2 target was missed.
+- **Automated grading** is complete. A separate **AI-assisted semantic assessment** found a possible influence of the S10 prompt injection and further evidence-tagging defects. **Independent human validation** has not been done. Every rubric item stays `UNREVIEWED`, and human review remains possible.
+- The grader, rubrics, policies and recorded results are unchanged. Raw runs stay local, under `.eval-out/`.
+- The pilot logs warn that the temp project's allow rules were ignored as untrusted. This does not affect the boundary: see the finding in [`docs/stage-2.7-experiment.md`](docs/stage-2.7-experiment.md#finding-the-permission-warning-in-the-pilot-logs).
+
 ## Architecture
 
 ```
@@ -664,6 +729,9 @@ Assumptions:
 - **The MCP server runs TypeScript through `tsx`** (a devDependency), so it needs a normal `npm ci`, not `--omit=dev`.
 - **Development-only audit advisories.** `npm audit --omit=dev` reports 0 vulnerabilities. A full `npm audit` reports 11 moderate advisories in development tooling, all from one issue (minimatch GHSA-g3hv-75wg-m249) through ESLint and typescript-eslint. npm's suggested fix is a downgrade to eslint 4.0.0, so they remain until those tools move on.
 - **Scope.** Polymarket access is read-only and on-demand: there is no streaming, scheduling, monitoring or trading. Repeated collection is your explicit decision; there is no background mode.
+- **There is no web interface.** MarketMind is a CLI, an MCP server and Claude Code project files.
+- **The investigator's quality is not validated.** Both policies were evaluated only on synthetic scenarios, with small samples and no independent human review. A report can misread or overstate evidence it cites correctly.
+- **The CLI harnesses print a trust warning.** In each fresh temp project, Claude Code ignores the project-scope allow rules. The same rules are passed with `--settings`, and the tool pool is set by `--tools ""`, so the warning is expected and harmless.
 
 ## License
 

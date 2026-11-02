@@ -1,4 +1,4 @@
-# Agent evaluation runbook (Stages 2.4–2.6)
+# Agent evaluation runbook (Stages 2.4–2.7)
 
 This directory evaluates the `/investigate-market` skill and `market-investigator` subagent on **synthetic, versioned fixtures**. There are two separate layers.
 
@@ -8,7 +8,7 @@ This directory evaluates the `/investigate-market` skill and `market-investigato
 | **Real agent (opt-in)** | Claude Code headless investigations, then offline grading | model quota from **your** Claude Code account | `npx tsx test-agent/run.ts …` |
 | **Agent SDK (opt-in, Stage 2.6)** | The `agent-sdk/` application on the approved subset, then the same offline grading | a Claude Console **API key** (billed separately; see `agent-sdk/README.md`) | `npx tsx test-agent/run.ts --harness sdk …` |
 
-The investigator under test is the committed v0.5.0 files, which the runner hashes and compares against the `v0.5.0` tag. Do not change the investigator to improve scores; record a new baseline instead.
+`run.ts` evaluates the committed investigator files, which since commit `5f4065c` are `policy-v2`. The runner hashes them and compares them with the `v0.5.0` tag, so `matchesBaseline` is `false` for `policy-v2` (see "Policy identity"). Do not change the investigator to improve scores; record a new baseline instead.
 
 ## Files
 
@@ -190,7 +190,7 @@ npx tsx test-agent/eval/compare.ts <baseline> <candidate>   # confounders, then 
 npx tsx test-agent/run.ts --harness sdk --scenario S01,S02,S03,S09,S10 --max-budget-usd 0.40 --total-budget-usd 2 --out .eval-out/sdk
 ```
 
-**Authentication.** `--auth` is explicit for the CLI harness. It is never inferred from the shell, and neither mode falls back to the other. The SDK harness stays API-key only and refuses `--auth subscription` until Gate G0 is resolved. A real subscription run has not been made under this gate yet.
+**Authentication.** `--auth` is explicit for the CLI harness. It is never inferred from the shell, and neither mode falls back to the other. The SDK harness stays API-key only and refuses `--auth subscription` until Gate G0 is resolved. Under this gate, subscription mode has run the Stage 2.7 pilot (10 runs) and the live investigations.
 
 | | `--auth subscription` | `--auth api-key` |
 |---|---|---|
