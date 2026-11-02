@@ -1,13 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/server";
-import { createClobClient } from "../adapters/polymarket/clobClient.js";
-import { createGammaClient } from "../adapters/polymarket/gammaClient.js";
-import { createHttpClient } from "../adapters/polymarket/httpClient.js";
-import { createRequestBudget } from "../adapters/polymarket/requestBudget.js";
-import { inspectMarket } from "../app/inspectMarket.js";
 import { scanMarkets, type ScanOptions } from "../app/scanMarkets.js";
 import { decimal } from "../domain/decimal.js";
-import { isMarketMindError, MarketMindError } from "../domain/errors.js";
 import { InspectInput, InspectOutput, MCP_LIMITS, ScanInput, ScanOutput } from "../research/contracts.js";
+import { inspectLiveMarket } from "../research/liveInspection.js";
 import { fitted, success } from "./results.js";
 import { handle, type McpDeps } from "./server.js";
 import { inspectSummary, inspectView, scanSummary, scanView, type ScanCaps } from "../research/views.js";
@@ -81,27 +76,8 @@ export function registerLiveTools(server: McpServer, deps: McpDeps): void {
     },
     (input, ctx) =>
       handle("inspect_market", deps, async () => {
-        const L = MCP_LIMITS.inspect;
         const depthBand = input.depthBand === null ? null : decimal(input.depthBand);
-        const { result, usage } = await deps.gate.run(L.maxAttempts, ctx.mcpReq.signal, async (http, usage) => {
-          // The deadline starts once the call runs, not while it waits for an earlier live call.
-          const deadline = deps.deadline ? deps.deadline(L.deadlineMs) : AbortSignal.timeout(L.deadlineMs);
-          const signal = AbortSignal.any([ctx.mcpReq.signal, deadline]);
-          const client = createHttpClient({ ...deps.config, maxRetries: Math.min(deps.config.maxRetries, L.maxRetries) }, { ...http, budget: createRequestBudget(L.maxAttempts), signal });
-          try {
-            const result = await inspectMarket(
-              { gamma: createGammaClient(client, deps.config.gammaBaseUrl), clob: createClobClient(client, deps.config.clobBaseUrl) },
-              input.marketId,
-              { depthBand },
-            );
-            return { result, usage };
-          } catch (error) {
-            if (isMarketMindError(error) && error.kind === "Cancelled" && deadline.aborted && !ctx.mcpReq.signal.aborted) {
-              throw new MarketMindError("Cancelled", `Inspection exceeded its ${L.deadlineMs} ms deadline`, { ...error.details, code: "DEADLINE" });
-            }
-            throw error;
-          }
-        });
+        const { result, usage } = await inspectLiveMarket(deps, input.marketId, depthBand, ctx.mcpReq.signal);
         const budget = { call: { ...usage }, process: deps.gate.process };
         const now = deps.now();
         return fitted(

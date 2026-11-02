@@ -39,3 +39,13 @@ describe("research layer boundary", () => {
     }
   });
 });
+
+describe("web server boundary", () => {
+  it("the web server reaches no storage, SQLite, collection, MCP, CLI, agents or child processes", () => {
+    const { files, packages } = graph("src/web/main.ts");
+    expect(files).toContain("src/web/server.ts");
+    expect(files.filter((f) => /^src\/(mcp|cli|adapters\/storage)\/|collectMarkets|^agent-sdk\/|^test-agent\//.test(f))).toEqual([]);
+    expect(packages.filter((p) => /^node:(sqlite|child_process|net|https|fs|worker_threads)$|^@modelcontextprotocol\//.test(p))).toEqual([]);
+    expect(packages.filter((p) => p.startsWith("node:")).sort()).toEqual(["node:fs/promises", "node:http", "node:path"]);
+  });
+});

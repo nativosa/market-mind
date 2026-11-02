@@ -655,16 +655,19 @@ src/
   app/        use cases: listMarkets, inspectMarket, scanMarkets, collectMarkets, marketHistory, observationDetails (+ concurrency helpers)
   research/   transport-neutral layer: contracts (Zod schemas), bounded views, error envelopes, live request gate
   mcp/        MCP server (stdio): tool registration and MCP result wrapping over src/research
+  web/        local read-only HTTP API (node:http, 127.0.0.1 only) over src/research, plus the built UI's static files
 bin/marketmind-mcp.mjs   portable MCP launcher (any working directory, no shell wrapper)
+bin/marketmind-web.mjs   portable web server launcher (Stage 3.1, in progress)
 ```
 
-Dependencies point inward: `cli`/`mcp → research → app → adapters/analytics/domain`. ESLint enforces these boundaries (each file group has exactly one combined import rule, so no rule silently overrides another):
+Dependencies point inward: `cli`/`mcp`/`web → research → app → adapters/analytics/domain`. ESLint enforces these boundaries (each file group has exactly one combined import rule, so no rule silently overrides another):
 
 - `domain` and `analytics` cannot import outer layers or `node:*`, and may not use `parseFloat`/`Number`/`Math`.
 - Only `httpClient.ts` may call `fetch`.
 - Only `adapters/storage/sqlite.ts` may import `node:sqlite`. Storage and the Polymarket adapters never import each other. The scanner talks to storage only through an optional `onSettled` callback that `collect` provides.
 - Only `src/mcp` may import the MCP SDK, and nothing imports `src/mcp`. `src/mcp` may not import the CLI, storage internals (except process liveness), `collectMarkets`, `node:sqlite`, `node:fs`, `node:child_process`, `node:net` or `node:http(s)`.
 - `src/research` may not import `node:*`, the MCP SDK, `src/mcp`, the CLI or storage. `src/research/contracts.ts` (the only module browser code may use) imports nothing but `zod` and the analytics version, which `test/unit/researchBoundary.test.ts` checks across the whole import graph.
+- `src/web` may not import the CLI, `src/mcp`, the MCP SDK, storage, `collectMarkets`, agent code, `node:sqlite`, `node:child_process`, `node:net`, `node:https` or `node:fs`; from `node:fs/promises` it may import only `readFile`, `realpath` and `stat`.
 
 The HTTP client itself only offers a `GET` method. The scanner adds an optional request budget and abort signal to it; both are additive and unused by `markets`/`inspect`.
 

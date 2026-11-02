@@ -192,3 +192,54 @@ export function webGateSettings(env: Record<string, string | undefined>): { proc
   }
   return { processLimit, window: { limit, windowMs: L.window.windowMs } };
 }
+
+export interface CooldownGate extends LiveGate {
+  /** Milliseconds until live calls are allowed again after an upstream 429; 0 when not cooling down. */
+  readonly cooldownRemainingMs: number;
+}
+
+/**
+ * Wrap a gate so that an upstream rate limit (HTTP 429) starts a local cooldown: until it ends, every
+ * live call is refused with RateLimited/LOCAL_COOLDOWN before any request is sent, including calls
+ * that were already queued when the 429 arrived. Refusals charge nothing. Used by the web server only.
+ */
+export function withRateLimitCooldown(gate: LiveGate, cooldownMs: number, now: () => number = Date.now): CooldownGate {
+  let until = 0;
+  const remaining = () => Math.max(0, until - now());
+  const refuseIfCooling = () => {
+    const left = remaining();
+    if (left > 0) {
+      throw new MarketMindError("RateLimited", `Polymarket rate-limited an earlier request; live requests pause for ${Math.ceil(left / 1000)} s`, {
+        code: "LOCAL_COOLDOWN",
+        attempts: 0,
+        retryAfterMs: left,
+      });
+    }
+  };
+  return {
+    get process() {
+      return gate.process;
+    },
+    get window() {
+      return gate.window;
+    },
+    get cooldownRemainingMs() {
+      return remaining();
+    },
+    async run(maxAttempts, signal, fn) {
+      refuseIfCooling();
+      return gate.run(maxAttempts, signal, async (http, usage) => {
+        refuseIfCooling(); // a 429 may have arrived while this call was queued
+        try {
+          return await fn(http, usage);
+        } catch (error) {
+          if (isMarketMindError(error) && error.kind === "RateLimited") {
+            until = now() + cooldownMs;
+            throw new MarketMindError("RateLimited", error.message, { ...error.details, retryAfterMs: cooldownMs });
+          }
+          throw error;
+        }
+      });
+    },
+  };
+}

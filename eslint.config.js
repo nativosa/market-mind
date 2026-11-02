@@ -116,6 +116,26 @@ export default tseslint.config(
       ],
     ),
   },
+  // Web: the local HTTP API over the research layer. A loopback socket and read-only static files
+  // only: no SQLite, storage, collection, processes, agents, MCP or CLI.
+  {
+    files: ["src/web/**/*.ts"],
+    rules: restrict(
+      [
+        SQLITE,
+        ...["node:child_process", "node:net", "node:https", "node:fs", "node:worker_threads"].map((name) => ({
+          name,
+          message: "The web server must not spawn processes, open other sockets or write files.",
+        })),
+        { name: "node:fs/promises", allowImportNames: ["readFile", "realpath", "stat"], message: "The web server only reads its built static files." },
+      ],
+      [
+        { group: ["**/cli/**", "**/mcp/**"], message: "The web server must not depend on the CLI or MCP." },
+        { group: ["**/adapters/storage/**", "**/app/collectMarkets*", "**/agent-sdk/**", "**/test-agent/**"], message: "The web server never touches storage, collects or runs agents." },
+        MCP_SDK,
+      ],
+    ),
+  },
   // MCP: an integration boundary over application services. Read-only by construction: no SQLite,
   // no storage writes, no collection, no processes, sockets or file system, and no CLI internals.
   {

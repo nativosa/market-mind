@@ -26,6 +26,8 @@ export default defineConfig({
         // main.ts only runs in spawned processes (covered by test/unit/mcpStdio.test.ts, invisible to V8 coverage).
         // One group: the same code the v0.8.0 MCP threshold covered, now split across src/mcp and src/research.
         "{src/mcp/{liveTools,results,server,storedTools}.ts,src/research/**}": { lines: 90, statements: 90, functions: 90, branches: 85 },
+        // Stage 3.1 web API (main.ts runs only in the spawned-launcher test, invisible to V8 coverage).
+        "src/web/{routes,security,server,settings,static}.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
       },
     },
   },

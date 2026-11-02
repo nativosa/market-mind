@@ -31,9 +31,10 @@ const redactPaths = (text: string) =>
 
 const RETRYABLE_STORAGE = new Set(["DATABASE_BUSY"]);
 
-export function describeError(error: unknown): ErrorOutput["error"] {
+/** `server` names the process whose stderr log holds an internal error's detail. */
+export function describeError(error: unknown, server: "MCP server" | "web server" = "MCP server"): ErrorOutput["error"] {
   if (!isMarketMindError(error)) {
-    return { category: "internal_error", code: null, message: "Internal error in the MarketMind MCP server; see its stderr log.", retryable: false, details: {} };
+    return { category: "internal_error", code: null, message: `Internal error in the MarketMind ${server}; see its stderr log.`, retryable: false, details: {} };
   }
   const d = error.details;
   const code = d.code ?? null;
@@ -64,7 +65,8 @@ export function describeError(error: unknown): ErrorOutput["error"] {
     case "HttpStatus":
       return e("upstream_unavailable", `${error.kind}: ${error.message}`, true, { kind: error.kind, ...upstream });
     case "RateLimited":
-      return e("rate_limited", "Polymarket rate-limited the request. Wait before retrying.", true, upstream);
+      // retryAfterMs is set only by the web server's local cooldown after a 429.
+      return e("rate_limited", "Polymarket rate-limited the request. Wait before retrying.", true, d.retryAfterMs === undefined ? upstream : { ...upstream, retryAfterMs: d.retryAfterMs });
     case "Validation":
     case "AssociationMismatch":
     case "InvalidBook":

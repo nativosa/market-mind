@@ -20,8 +20,10 @@ import {
   type MarketsOutput,
   type RunsOutput,
   type ScanOutput,
+  type WebStatusOutput,
 } from "./contracts.js";
-import type { LiveUsage, ProcessUsage, WindowUsage } from "./liveGate.js";
+import type { CooldownGate, LiveUsage, ProcessUsage, WindowUsage } from "./liveGate.js";
+import { APP_VERSION } from "../config/config.js";
 import { envelopeOf, untrusted } from "./envelope.js";
 
 const d = (v: Decimal | null): string | null => (v === null ? null : decimalToString(v));
@@ -573,5 +575,26 @@ export function marketsView(result: ListMarketsResult, budget: WebBudgetView, no
     pagination: { nextCursor: cursorOk ? next : null, stoppedReason: next === null ? "LAST_PAGE" : cursorOk ? null : "CURSOR_UNSUPPORTED" },
     request: requestOf(result.provenance),
     budget: { ...budgetOf(budget), window: budget.window && { ...budget.window } },
+  };
+}
+
+// ---- web: status ----
+
+export function webStatusView(gate: CooldownGate, now: Date): WebStatusOutput {
+  const L = WEB_LIMITS;
+  const cooldown = gate.cooldownRemainingMs;
+  const window = gate.window;
+  return {
+    contract: WEB_CONTRACT.status,
+    appVersion: APP_VERSION,
+    generatedAt: now.toISOString(),
+    readOnly: true,
+    limits: {
+      list: { pageSize: L.list.pageSize, maxAttempts: L.list.maxAttempts, deadlineMs: L.list.deadlineMs },
+      inspect: { maxAttempts: L.inspect.maxAttempts, deadlineMs: L.inspect.deadlineMs, levels: { ...MCP_LIMITS.inspect.levels } },
+      rateLimitCooldownMs: L.rateLimitCooldownMs,
+    },
+    budget: { process: { ...gate.process }, window: window && { ...window } },
+    rateLimit: { coolingDown: cooldown > 0, retryAfterMs: cooldown },
   };
 }

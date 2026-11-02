@@ -11,6 +11,7 @@
   "scripts": {
     "cli": "tsx src/cli/main.ts",
     "mcp": "node bin/marketmind-mcp.mjs",
+    "web": "node bin/marketmind-web.mjs",
     "agent": "tsx agent-sdk/cli.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

@@ -37,14 +37,18 @@ export const WEB_LIMITS = {
   processRequests: { default: 2_000, max: 20_000 },
   /** Attempts within any trailing five minutes (MARKETMIND_WEB_WINDOW_REQUESTS overrides). */
   window: { requests: { default: 60, max: 600 }, windowMs: 300_000 },
-  /** Gamma keyset cursors are opaque; only this bounded, URL-safe form is accepted or passed on. */
+  /** Gamma keyset cursors are opaque: bounded in length, printable, and never interpreted. */
   cursorChars: 512,
+  /** After an upstream HTTP 429, live routes refuse locally (no request reaches Polymarket) for this long. */
+  rateLimitCooldownMs: 60_000,
   skippedShown: 10,
   outcomeLabelsShown: 10,
 } as const;
 
 export const WEB_CONTRACT = {
   markets: "marketmind.web.list_markets/1",
+  status: "marketmind.web.status/1",
+  error: "marketmind.web.error/1",
 } as const;
 
 export const CONTRACT = {
@@ -118,8 +122,16 @@ export const DetailsInput = obj({
   levels: int(0, L.details.levels.max).default(L.details.levels.default).describe("Captured price levels per side to return, in wire order."),
 });
 
-/** Opaque keyset cursor: URL-safe characters only, bounded. Never a URL. */
-export const Cursor = z.string().regex(new RegExp(`^[A-Za-z0-9_.~+/=-]{1,${WEB_LIMITS.cursorChars}}$`), "an opaque keyset cursor from a previous page");
+/**
+ * Opaque keyset cursor: any printable text up to the length bound (no control, bidi-control or lone
+ * surrogate characters). It is only ever sent as the value of Gamma's after_cursor query parameter,
+ * encoded by URLSearchParams, so it cannot change the upstream host or path.
+ */
+export const Cursor = z
+  .string()
+  .min(1)
+  .max(WEB_LIMITS.cursorChars)
+  .regex(/^[^\p{Cc}\p{Cs}\p{Bidi_Control}]+$/u, "an opaque keyset cursor from a previous page");
 
 export const MarketsInput = obj({
   version: z.enum(["v1", "v2"]).default("v1").describe("Protocol version to list."),
@@ -369,7 +381,7 @@ export const MarketsOutput = envelope(WEB_CONTRACT.markets, ["ok", "empty"], {
   skipped: obj({ ...Truncation, items: z.array(obj({ id: z.string().nullable(), issues: z.array(z.string()) })).max(WEB_LIMITS.skippedShown) }),
   pagination: obj({
     nextCursor: Cursor.nullable(),
-    /** CURSOR_UNSUPPORTED: Gamma returned a cursor outside the accepted form, so paging stops here. */
+    /** CURSOR_UNSUPPORTED: Gamma returned a cursor that is too long or not printable text, so paging stops here. */
     stoppedReason: z.enum(["LAST_PAGE", "CURSOR_UNSUPPORTED"]).nullable(),
   }),
   request: Request,
@@ -636,6 +648,38 @@ export const ErrorOutput = obj({
   }),
 });
 export type ErrorOutput = z.infer<typeof ErrorOutput>;
+
+/** Web API errors: the shared categories plus request-level refusals that never reach a live call. */
+export const WebErrorCategory = z.enum([...ErrorCategory.options, "forbidden", "route_not_found", "method_not_allowed"]);
+export type WebErrorCategory = z.infer<typeof WebErrorCategory>;
+
+export const WebErrorOutput = obj({
+  contract: z.literal(WEB_CONTRACT.error),
+  error: obj({
+    category: WebErrorCategory,
+    code: z.string().nullable(),
+    message: z.string(),
+    retryable: z.boolean(),
+    details: z.record(z.string(), z.unknown()),
+  }),
+});
+export type WebErrorOutput = z.infer<typeof WebErrorOutput>;
+
+/** GET /api/status: version, limits and remaining live capacity. No paths, environment values or secrets. */
+export const WebStatusOutput = obj({
+  contract: z.literal(WEB_CONTRACT.status),
+  appVersion: z.string(),
+  generatedAt: Iso,
+  readOnly: z.literal(true),
+  limits: obj({
+    list: obj({ pageSize: Count, maxAttempts: Count, deadlineMs: Count }),
+    inspect: obj({ maxAttempts: Count, deadlineMs: Count, levels: obj({ default: Count, max: Count }) }),
+    rateLimitCooldownMs: Count,
+  }),
+  budget: obj({ process: obj({ limit: Count, used: Count, remaining: Count }), window: WindowBudget.nullable() }),
+  rateLimit: obj({ coolingDown: z.boolean(), retryAfterMs: Count }),
+});
+export type WebStatusOutput = z.infer<typeof WebStatusOutput>;
 
 export type ScanOutput = z.infer<typeof ScanOutput>;
 export type InspectOutput = z.infer<typeof InspectOutput>;

@@ -175,10 +175,28 @@ describe("marketsView", () => {
     expect(v).toMatchObject({ status: "empty", markets: { returnedCount: 0, items: [] }, pagination: { nextCursor: null, stoppedReason: "LAST_PAGE" } });
   });
 
-  it("stops paging rather than pass on a cursor outside the accepted form", async () => {
-    const v = await setup(page([gammaRecord({ id: "1" })], "https://evil.example/?x=1 y")).view();
+  it.each([
+    ["a control character", `abc\u0000def`],
+    ["a bidi override", `abc\u202edef`],
+    ["more than 512 characters", "x".repeat(513)],
+  ])("stops paging rather than pass on a cursor with %s", async (_name, cursor) => {
+    const v = await setup(page([gammaRecord({ id: "1" })], cursor)).view();
     expect(v.pagination).toEqual({ nextCursor: null, stoppedReason: "CURSOR_UNSUPPORTED" });
-    expect(JSON.stringify(v)).not.toContain("evil.example");
+  });
+
+  it("treats a cursor as opaque: URL-like content stays one encoded query value and never changes host or path", async () => {
+    const opaque = "https://evil.example/x?closed=true&limit=1000#frag/../../admin %2F";
+    const s = setup([page([gammaRecord({ id: "1" })], opaque), page([gammaRecord({ id: "2" })])]);
+    const first = await s.view();
+    expect(first.pagination).toEqual({ nextCursor: opaque, stoppedReason: null });
+    await s.view({ cursor: opaque });
+    const url = new URL(s.calls[1]!.url);
+    expect(url.origin + url.pathname).toBe(`${GAMMA}/markets/keyset`);
+    expect(url.hash).toBe("");
+    expect([...url.searchParams.keys()].sort()).toEqual(["after_cursor", "ascending", "closed", "limit", "order", "version"]);
+    expect(url.searchParams.get("after_cursor")).toBe(opaque);
+    expect(url.searchParams.get("closed")).toBe("false");
+    expect(url.searchParams.get("limit")).toBe("50");
   });
 });
 
@@ -190,9 +208,11 @@ describe("MarketsInput", () => {
   it.each([
     { version: "v3" },
     { cursor: "" },
-    { cursor: "https://gamma.example/markets" },
-    { cursor: "a b" },
     { cursor: "x".repeat(513) },
+    { cursor: "line\nbreak" },
+    { cursor: "del\u007f" },
+    { cursor: "lone\ud800surrogate" },
+    { cursor: "bidi\u2066isolate" },
     { cursor: "../../etc" + "\u0000" },
     { url: "https://example.com" },
     { limit: 1000 },
@@ -200,8 +220,10 @@ describe("MarketsInput", () => {
     expect(MarketsInput.safeParse(input).success).toBe(false);
   });
 
-  it("accepts an opaque URL-safe cursor up to the bound", () => {
+  it("accepts any printable opaque cursor up to the bound, without assuming a format", () => {
     expect(MarketsInput.parse({ cursor: "eyJpZCI6MTIzfQ==", version: "v2" })).toEqual({ cursor: "eyJpZCI6MTIzfQ==", version: "v2" });
-    expect(MarketsInput.safeParse({ cursor: "a".repeat(512) }).success).toBe(true);
+    for (const cursor of ["a".repeat(512), "a b", "id:123|vol:4.5", "https://gamma.example/markets", "caf\u00e9"]) {
+      expect(MarketsInput.safeParse({ cursor }).success, cursor).toBe(true);
+    }
   });
 });
