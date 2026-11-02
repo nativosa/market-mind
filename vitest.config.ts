@@ -2,13 +2,15 @@ import { defineConfig } from "vitest/config";
 
 // Offline suite: never touches the network (see test/setup.ts).
 export default defineConfig({
+  // The React explorer's tests render components with the automatic JSX runtime (as Vite builds them).
+  oxc: { jsx: { runtime: "automatic", importSource: "react" } },
   test: {
-    include: ["test/**/*.test.ts"],
+    include: ["test/**/*.test.ts", "web/test/**/*.test.{ts,tsx}"],
     setupFiles: ["test/setup.ts"],
     environment: "node",
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts", "agent-sdk/**/*.ts"],
+      include: ["src/**/*.ts", "agent-sdk/**/*.ts", "web/src/**/*.{ts,tsx}"],
       reporter: ["text", "text-summary"],
       thresholds: {
         lines: 75,
@@ -28,6 +30,9 @@ export default defineConfig({
         "{src/mcp/{liveTools,results,server,storedTools}.ts,src/research/**}": { lines: 90, statements: 90, functions: 90, branches: 85 },
         // Stage 3.1 web API (main.ts runs only in the spawned-launcher test, invisible to V8 coverage).
         "src/web/{routes,security,server,settings,static}.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
+        // Stage 3.1 explorer UI (main.tsx only mounts the app in a browser).
+        "web/src/{api,controller,explorer,format}.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
+        "web/src/{App,components/*}.tsx": { lines: 85, statements: 85, functions: 80, branches: 75 },
       },
     },
   },

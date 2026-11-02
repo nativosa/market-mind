@@ -26,7 +26,7 @@ const MCP_LAYER = { group: ["**/mcp/**"], message: "Only the MCP entry points ma
 const restrict = (paths, patterns) => ({ "no-restricted-imports": ["error", { paths, patterns }] });
 
 export default tseslint.config(
-  { ignores: ["node_modules/", "coverage/", "dist/"] },
+  { ignores: ["node_modules/", "coverage/", "dist/", "web/dist/"] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -135,6 +135,49 @@ export default tseslint.config(
         MCP_SDK,
       ],
     ),
+  },
+  // Browser code (web/src): DOM only. Its one link to the server code is src/research/contracts.ts
+  // (Zod schemas, no Node). No Node globals, no raw HTML, and network access only through api.ts.
+  {
+    files: ["web/src/**/*.{ts,tsx}"],
+    languageOptions: { globals: globals.browser },
+    rules: {
+      ...restrict(
+        [],
+        [
+          { group: ["node:*"], message: "Browser code must not import Node built-ins." },
+          { regex: "^(\\.\\./)+(src|agent-sdk|test|test-agent|bin)/(?!research/contracts(\\.js)?$)", message: "Browser code may import only src/research/contracts from the server code." },
+          { group: ["@modelcontextprotocol/*", "@anthropic-ai/*", "big.js"], message: "Browser code must not depend on MCP, agent or server-only packages." },
+        ],
+      ),
+      "no-restricted-syntax": [
+        "error",
+        { selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']", message: "Render third-party text as plain text only." },
+        { selector: "MemberExpression[property.name=/^(innerHTML|outerHTML)$/]", message: "Render third-party text as plain text only." },
+        { selector: "CallExpression[callee.property.name='insertAdjacentHTML']", message: "Render third-party text as plain text only." },
+      ],
+    },
+  },
+  {
+    files: ["web/src/**/*.{ts,tsx}"],
+    ignores: ["web/src/api.ts"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...["process", "Buffer", "require", "global", "__dirname", "__filename"].map((name) => ({ name, message: "Browser code must not use Node globals." })),
+        ...["fetch", "XMLHttpRequest", "WebSocket", "EventSource"].map((name) => ({ name, message: "Network access belongs in web/src/api.ts (same-origin /api only)." })),
+      ],
+    },
+  },
+  {
+    files: ["web/src/api.ts"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...["process", "Buffer", "require", "global", "__dirname", "__filename"].map((name) => ({ name, message: "Browser code must not use Node globals." })),
+        ...["XMLHttpRequest", "WebSocket", "EventSource"].map((name) => ({ name, message: "The API client uses fetch to same-origin /api only." })),
+      ],
+    },
   },
   // MCP: an integration boundary over application services. Read-only by construction: no SQLite,
   // no storage writes, no collection, no processes, sockets or file system, and no CLI internals.

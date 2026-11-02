@@ -657,7 +657,9 @@ src/
   mcp/        MCP server (stdio): tool registration and MCP result wrapping over src/research
   web/        local read-only HTTP API (node:http, 127.0.0.1 only) over src/research, plus the built UI's static files
 bin/marketmind-mcp.mjs   portable MCP launcher (any working directory, no shell wrapper)
-bin/marketmind-web.mjs   portable web server launcher (Stage 3.1, in progress)
+web/          React + Vite Market Explorer (browser only; imports nothing from src/ but src/research/contracts.ts)
+bin/marketmind-web.mjs       portable web server launcher (Stage 3.1, in progress)
+bin/marketmind-web-dev.mjs   development: API server + Vite dev server together, no shell needed
 ```
 
 Dependencies point inward: `cli`/`mcp`/`web → research → app → adapters/analytics/domain`. ESLint enforces these boundaries (each file group has exactly one combined import rule, so no rule silently overrides another):

@@ -1,0 +1,111 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { MarketsOutput } from "../../src/research/contracts";
+import { fixture, json } from "../../test/helpers";
+import { closeAllWeb, get, startWeb } from "../../test/webFixtures";
+import { createApiClient, type FetchLike } from "../src/api";
+import { item, NOW, page, response, serverError, status } from "./fixtures";
+
+afterEach(closeAllWeb);
+
+function recording(reply: (url: string) => Response | Promise<Response>) {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const fetchFn: FetchLike = async (url, init) => {
+    calls.push({ url, init });
+    return reply(url);
+  };
+  return { calls, client: createApiClient(fetchFn, () => NOW) };
+}
+
+describe("api client", () => {
+  it("calls only same-origin /api paths with GET and encodes the cursor as one query value", async () => {
+    const r = recording(() => response(page([item("1")])));
+    await r.client.markets({ version: "v2", cursor: "a&b=c/d?e#f" });
+    await r.client.markets({ version: "v1", cursor: null });
+    await r.client.status();
+    await r.client.inspect("123", { levels: 2 });
+    expect(r.calls.map((c) => c.url)).toEqual(["/api/markets?version=v2&cursor=a%26b%3Dc%2Fd%3Fe%23f", "/api/markets?version=v1", "/api/status", "/api/markets/123/inspect?levels=2"]);
+    expect(r.calls.every((c) => c.init.method === "GET" && c.init.credentials === "same-origin" && c.init.redirect === "error" && c.init.cache === "no-store")).toBe(true);
+  });
+
+  it("returns a validated page with exact decimal strings", async () => {
+    const r = recording(() => response(page([item("1", { gammaVolume24hr: "1234567.890000001" })])));
+    const result = await r.client.markets({ version: "v1" });
+    expect(result).toMatchObject({ ok: true, receivedAt: NOW });
+    expect(result.ok && result.data.markets.items[0]!.gammaVolume24hr).toBe("1234567.890000001");
+  });
+
+  it("maps the structured error contract and keeps retry guidance", async () => {
+    const r = recording(() => response(serverError("budget_exhausted", "WINDOW_BUDGET_EXHAUSTED", { attempts: 0, retryAfterMs: 120_000 }), 429));
+    const result = await r.client.markets({ version: "v1" });
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: "server", httpStatus: 429, receivedAt: NOW, error: { category: "budget_exhausted", code: "WINDOW_BUDGET_EXHAUSTED", message: "fixture", retryable: true, details: { attempts: 0, retryAfterMs: 120_000 } } },
+    });
+    expect(r.calls).toHaveLength(1); // never retried automatically
+  });
+
+  it.each([
+    ["a 200 that breaks the contract", () => response({ ...page([item("1")]), markets: { returnedCount: 1, items: [{ gammaId: 1 }] } })],
+    ["a 200 with an unknown contract field", () => response({ ...page([item("1")]), injected: "<script>" })],
+    ["an error body without the error contract", () => response({ message: "boom" }, 500)],
+    ["a body that is not JSON", () => new Response("<html>proxy error</html>", { status: 502 })],
+  ])("rejects %s as invalid_response", async (_name, reply) => {
+    const r = recording(reply);
+    const result = await r.client.markets({ version: "v1" });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.kind).toBe("invalid_response");
+  });
+
+  it("reports a network failure, and an abort as aborted", async () => {
+    const down = createApiClient(() => Promise.reject(new TypeError("Failed to fetch")));
+    expect(await down.status()).toEqual({ ok: false, error: { kind: "network" } });
+    const controller = new AbortController();
+    const pending = createApiClient(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    ).markets({ version: "v1" }, controller.signal);
+    controller.abort();
+    expect(await pending).toEqual({ ok: false, error: { kind: "aborted" } });
+  });
+
+  it("treats an answer that arrives after its abort as aborted", async () => {
+    const controller = new AbortController();
+    const client = createApiClient(() => {
+      controller.abort();
+      return Promise.resolve(response(page([item("1")])));
+    });
+    expect(await client.markets({ version: "v1" }, controller.signal)).toEqual({ ok: false, error: { kind: "aborted" } });
+  });
+
+  it("validates status", async () => {
+    const r = recording(() => response(status));
+    expect(await r.client.status()).toMatchObject({ ok: true, data: { readOnly: true } });
+  });
+});
+
+describe("api client against the real local server (fixture upstream)", () => {
+  it("lists, pages and reports budget errors exactly as the server sends them", async () => {
+    const s = await startWeb({
+      routes: { after_cursor: json({ markets: [], next_cursor: null }), "/markets/keyset": json(fixture("gamma/keyset-v1.json")) },
+      window: { limit: 10, windowMs: 300_000 },
+    });
+    const viaHttp: FetchLike = async (url) => {
+      const r = await get(s.port, url);
+      return new Response(r.text, { status: r.status, headers: { "content-type": String(r.headers["content-type"]) } });
+    };
+    const client = createApiClient(viaHttp, () => NOW);
+    const first = await client.markets({ version: "v1" });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(MarketsOutput.parse(first.data).markets.items.map((m) => m.gammaId)).toEqual(["100001", "100002"]);
+    expect(first.data.pagination.nextCursor).toBe("cursor-page-2");
+    const second = await client.markets({ version: "v1", cursor: first.data.pagination.nextCursor });
+    expect(second).toMatchObject({ ok: true, data: { status: "empty", query: { cursor: "cursor-page-2" } } });
+    expect(new URL(s.urls[1]!).searchParams.get("after_cursor")).toBe("cursor-page-2");
+    expect((await client.status()).ok).toBe(true);
+    const refused = await client.inspect("abc", {});
+    expect(refused).toMatchObject({ ok: false, error: { kind: "server", httpStatus: 400, error: { category: "invalid_arguments" } } });
+  });
+});
