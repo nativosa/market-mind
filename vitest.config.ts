@@ -24,7 +24,8 @@ export default defineConfig({
         "src/app/collectMarkets.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
         "src/app/marketHistory.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
         // main.ts only runs in spawned processes (covered by test/unit/mcpStdio.test.ts, invisible to V8 coverage).
-        "src/mcp/{contracts,liveBudget,liveTools,results,server,storedTools,views}.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
+        // One group: the same code the v0.8.0 MCP threshold covered, now split across src/mcp and src/research.
+        "{src/mcp/{liveTools,results,server,storedTools}.ts,src/research/**}": { lines: 90, statements: 90, functions: 90, branches: 85 },
       },
     },
   },

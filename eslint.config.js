@@ -90,6 +90,32 @@ export default tseslint.config(
     files: ["src/cli/**/*.ts", "src/config/**/*.ts"],
     rules: restrict([SQLITE], [MCP_LAYER, MCP_SDK]),
   },
+  // Research: transport-neutral contracts, views, envelopes and the live gate, shared by MCP and the
+  // future web server. No transport (MCP SDK, sockets), no Node I/O, no CLI, no storage, no writes.
+  {
+    files: ["src/research/**/*.ts"],
+    ignores: ["src/research/contracts.ts"],
+    rules: restrict(
+      [SQLITE],
+      [
+        { group: ["node:*"], message: "src/research must stay free of Node I/O." },
+        { group: ["**/cli/**", "**/mcp/**"], message: "src/research must not depend on the CLI or a transport." },
+        { group: ["**/adapters/storage/**", "**/app/collectMarkets*"], message: "src/research never touches storage or collects." },
+        MCP_SDK,
+      ],
+    ),
+  },
+  // Contracts are the one research module browser code may import: zod schemas and constants only.
+  {
+    files: ["src/research/contracts.ts"],
+    rules: restrict(
+      [SQLITE],
+      [
+        { group: [...outerLayers, "**/mcp/**", "**/research/**", "./*", "!./contracts*", "node:*"], message: "contracts.ts is browser-safe: zod and analytics/version only." },
+        MCP_SDK,
+      ],
+    ),
+  },
   // MCP: an integration boundary over application services. Read-only by construction: no SQLite,
   // no storage writes, no collection, no processes, sockets or file system, and no CLI internals.
   {

@@ -1,0 +1,10 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"contract\":\"marketmind.error/1\",\"error\":{\"category\":\"database_missing\",\"code\":\"DATABASE_MISSING\",\"message\":\"No local MarketMind database exists yet. Stored evidence is unavailable until `npm run cli -- collect` has been run.\",\"retryable\":false,\"details\":{}}}"
+    }
+  ],
+  "isError": true,
+  "tool": "list_collection_runs"
+}

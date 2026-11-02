@@ -6,8 +6,8 @@ import { finalizeRun, insertRecomputedMetrics, loadEvidence, persistObservation 
 import { recomputeMetrics } from "../src/analytics/recompute.js";
 import { ANALYTICS_VERSION } from "../src/analytics/version.js";
 import { DEFAULT_CONFIG } from "../src/config/config.js";
-import { DetailsOutput, HistoryOutput, InspectOutput, RunsOutput, ScanOutput } from "../src/mcp/contracts.js";
-import { createLiveGate, type LiveGate } from "../src/mcp/liveBudget.js";
+import { DetailsOutput, HistoryOutput, InspectOutput, RunsOutput, ScanOutput } from "../src/research/contracts.js";
+import { createLiveGate, type LiveGate } from "../src/research/liveGate.js";
 import { MAX_RESULT_CHARS } from "../src/mcp/results.js";
 import { createMarketMindServer } from "../src/mcp/server.js";
 import { fakeFetch, TEST_HTTP_OPTIONS, testDeps, type Reply } from "./helpers.js";

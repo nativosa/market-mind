@@ -2,10 +2,10 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { collectionRuns, marketHistory, observationDetails } from "../app/marketHistory.js";
 import { decimal } from "../domain/decimal.js";
 import { isMarketMindError, MarketMindError } from "../domain/errors.js";
-import { DetailsInput, DetailsOutput, HistoryInput, HistoryOutput, RunsInput, RunsOutput } from "./contracts.js";
+import { DetailsInput, DetailsOutput, HistoryInput, HistoryOutput, RunsInput, RunsOutput } from "../research/contracts.js";
 import { fitted, success } from "./results.js";
 import { handle, type McpDeps } from "./server.js";
-import { detailsSummary, detailsView, historySummary, historyView, noHistoryView, runsSummary, runsView, type HistoryQueryView } from "./views.js";
+import { detailsSummary, detailsView, historySummary, historyView, noHistoryView, runsSummary, runsView, type HistoryQueryView } from "../research/views.js";
 
 const halve = (n: number) => Math.floor(n / 2);
 const STORED = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;

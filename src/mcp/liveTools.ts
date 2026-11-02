@@ -7,10 +7,10 @@ import { inspectMarket } from "../app/inspectMarket.js";
 import { scanMarkets, type ScanOptions } from "../app/scanMarkets.js";
 import { decimal } from "../domain/decimal.js";
 import { isMarketMindError, MarketMindError } from "../domain/errors.js";
-import { InspectInput, InspectOutput, MCP_LIMITS, ScanInput, ScanOutput } from "./contracts.js";
+import { InspectInput, InspectOutput, MCP_LIMITS, ScanInput, ScanOutput } from "../research/contracts.js";
 import { fitted, success } from "./results.js";
 import { handle, type McpDeps } from "./server.js";
-import { inspectSummary, inspectView, scanSummary, scanView, type ScanCaps } from "./views.js";
+import { inspectSummary, inspectView, scanSummary, scanView, type ScanCaps } from "../research/views.js";
 
 const halve = (n: number) => Math.floor(n / 2);
 

@@ -1,0 +1,10 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"contract\":\"marketmind.error/1\",\"error\":{\"category\":\"budget_exhausted\",\"code\":\"PROCESS_BUDGET_EXHAUSTED\",\"message\":\"The server's live request ceiling cannot cover this call (8 needed, 3 left)\",\"retryable\":false,\"details\":{\"attempts\":0}}}"
+    }
+  ],
+  "isError": true,
+  "tool": "inspect_market"
+}

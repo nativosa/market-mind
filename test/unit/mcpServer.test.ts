@@ -6,7 +6,7 @@ import { createRun, finalizeRun, persistObservation } from "../../src/adapters/s
 import { all } from "../../src/adapters/storage/sqlite.js";
 import { ANALYTICS_VERSION } from "../../src/analytics/version.js";
 import { APP_VERSION } from "../../src/config/config.js";
-import { CONTRACT, HistoryOutput } from "../../src/mcp/contracts.js";
+import { CONTRACT, HistoryOutput } from "../../src/research/contracts.js";
 import { json, timeoutError } from "../helpers.js";
 import { V1_ROUTES, V2_ROUTES } from "../routes.js";
 import { assetId, bookBody, conditionId, gammaRecord, scanRoutes, type MarketSpec } from "../scanFixtures.js";

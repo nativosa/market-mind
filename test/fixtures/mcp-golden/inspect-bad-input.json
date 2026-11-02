@@ -1,0 +1,10 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Input validation error: Invalid arguments for tool inspect_market: levels: Too big: expected number to be <=20"
+    }
+  ],
+  "isError": true,
+  "tool": "inspect_market"
+}

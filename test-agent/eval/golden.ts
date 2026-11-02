@@ -4,7 +4,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HistoryOutput, InspectOutput, ScanOutput } from "../../src/mcp/contracts.js";
+import type { HistoryOutput, InspectOutput, ScanOutput } from "../../src/research/contracts.js";
 import { call, connect, errorOf, type Connected } from "../../test/mcpFixtures.js";
 import { agentRoutes, fixtureDigest, seedEvalDb, type SeedManifest } from "../fixtures.js";
 import type { EvalScenario } from "./scenarios.js";

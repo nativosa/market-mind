@@ -1,0 +1,10 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"contract\":\"marketmind.error/1\",\"error\":{\"category\":\"market_ineligible\",\"code\":null,\"message\":\"Market 77 cannot be inspected\",\"retryable\":false,\"details\":{\"issues\":[\"order book is not enabled\"]}}}"
+    }
+  ],
+  "isError": true,
+  "tool": "inspect_market"
+}

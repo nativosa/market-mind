@@ -1,0 +1,10 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"contract\":\"marketmind.error/1\",\"error\":{\"category\":\"market_not_found\",\"code\":null,\"message\":\"The market was not found upstream.\",\"retryable\":false,\"details\":{\"url\":\"https://gamma.example/markets/555\",\"httpStatus\":404,\"attempts\":1}}}"
+    }
+  ],
+  "isError": true,
+  "tool": "inspect_market"
+}

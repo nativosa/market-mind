@@ -8,8 +8,8 @@ import type { PriceLevel, RawLevel } from "../domain/orderbook.js";
 import type { Provenance } from "../domain/provenance.js";
 import type { StoredMetrics } from "../domain/snapshot.js";
 import { CONTRACT, MCP_LIMITS, type DetailsOutput, type HistoryOutput, type InspectOutput, type RunsOutput, type ScanOutput } from "./contracts.js";
-import type { LiveUsage, ProcessUsage } from "./liveBudget.js";
-import { envelopeOf, untrusted } from "./results.js";
+import type { LiveUsage, ProcessUsage } from "./liveGate.js";
+import { envelopeOf, untrusted } from "./envelope.js";
 
 const d = (v: Decimal | null): string | null => (v === null ? null : decimalToString(v));
 const question = (q: string) => untrusted(q, MCP_LIMITS.questionChars);

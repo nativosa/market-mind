@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createRun, finalizeRun } from "../../src/adapters/storage/snapshotStore.js";
-import { MCP_LIMITS } from "../../src/mcp/contracts.js";
+import { MCP_LIMITS } from "../../src/research/contracts.js";
 import { json } from "../helpers.js";
 import { gammaRecord, scanRoutes, type BookSpec, type MarketSpec } from "../scanFixtures.js";
 import { cleanupTemp, openMigrated, runInput, T0, tempDbPath } from "../storageFixtures.js";

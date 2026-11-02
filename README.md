@@ -653,16 +653,18 @@ src/
   adapters/polymarket/  HTTP client (timeout, bounded retry), Zod schemas, Gamma/CLOB clients, normalization
   adapters/storage/     node:sqlite connection + transactions, migrations, snapshot store, process liveness
   app/        use cases: listMarkets, inspectMarket, scanMarkets, collectMarkets, marketHistory, observationDetails (+ concurrency helpers)
-  mcp/        MCP server (stdio): contracts (Zod schemas), live/stored tools, bounded views, errors, live request gate
+  research/   transport-neutral layer: contracts (Zod schemas), bounded views, error envelopes, live request gate
+  mcp/        MCP server (stdio): tool registration and MCP result wrapping over src/research
 bin/marketmind-mcp.mjs   portable MCP launcher (any working directory, no shell wrapper)
 ```
 
-Dependencies point inward: `cli`/`mcp → app → adapters/analytics/domain`. ESLint enforces these boundaries (each file group has exactly one combined import rule, so no rule silently overrides another):
+Dependencies point inward: `cli`/`mcp → research → app → adapters/analytics/domain`. ESLint enforces these boundaries (each file group has exactly one combined import rule, so no rule silently overrides another):
 
 - `domain` and `analytics` cannot import outer layers or `node:*`, and may not use `parseFloat`/`Number`/`Math`.
 - Only `httpClient.ts` may call `fetch`.
 - Only `adapters/storage/sqlite.ts` may import `node:sqlite`. Storage and the Polymarket adapters never import each other. The scanner talks to storage only through an optional `onSettled` callback that `collect` provides.
 - Only `src/mcp` may import the MCP SDK, and nothing imports `src/mcp`. `src/mcp` may not import the CLI, storage internals (except process liveness), `collectMarkets`, `node:sqlite`, `node:fs`, `node:child_process`, `node:net` or `node:http(s)`.
+- `src/research` may not import `node:*`, the MCP SDK, `src/mcp`, the CLI or storage. `src/research/contracts.ts` (the only module browser code may use) imports nothing but `zod` and the analytics version, which `test/unit/researchBoundary.test.ts` checks across the whole import graph.
 
 The HTTP client itself only offers a `GET` method. The scanner adds an optional request budget and abort signal to it; both are additive and unused by `markets`/`inspect`.
 

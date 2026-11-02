@@ -5,7 +5,7 @@
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { realLiveness } from "../src/adapters/storage/processLiveness.js";
 import { DEFAULT_CONFIG } from "../src/config/config.js";
-import { createLiveGate } from "../src/mcp/liveBudget.js";
+import { createLiveGate } from "../src/research/liveGate.js";
 import { MAX_RESULT_CHARS } from "../src/mcp/results.js";
 import { createMarketMindServer } from "../src/mcp/server.js";
 import { fakeFetch, testDeps } from "../test/helpers.js";

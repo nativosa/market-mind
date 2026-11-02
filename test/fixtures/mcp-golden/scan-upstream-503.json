@@ -1,0 +1,10 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"contract\":\"marketmind.error/1\",\"error\":{\"category\":\"upstream_unavailable\",\"code\":null,\"message\":\"Upstream5xx: Upstream error (HTTP 503): down\",\"retryable\":true,\"details\":{\"kind\":\"Upstream5xx\",\"url\":\"https://gamma.example/markets/keyset?closed=false&limit=20&version=v1&order=volume24hr&ascending=false\",\"httpStatus\":503,\"attempts\":2}}}"
+    }
+  ],
+  "isError": true,
+  "tool": "scan_markets"
+}

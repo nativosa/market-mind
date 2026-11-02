@@ -3,7 +3,7 @@ import { realHttpDeps } from "../adapters/polymarket/httpClient.js";
 import { realLiveness } from "../adapters/storage/processLiveness.js";
 import { APP_VERSION } from "../config/config.js";
 import { isMarketMindError } from "../domain/errors.js";
-import { createLiveGate } from "./liveBudget.js";
+import { createLiveGate } from "../research/liveGate.js";
 import { MAX_RESULT_CHARS } from "./results.js";
 import { createMarketMindServer, mcpSettings } from "./server.js";
 
