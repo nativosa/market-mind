@@ -25,6 +25,28 @@ export const MCP_LIMITS = {
   labelChars: 100,
 } as const;
 
+/**
+ * Limits of the local web app (Stage 3.1). One browser request makes at most one bounded live call:
+ * a listing is one Gamma keyset page (1 retry, so at most 2 attempts); an inspection is exactly the
+ * MCP tool's (at most 8 attempts). The process ceiling and rolling window cap a browsing session.
+ */
+export const WEB_LIMITS = {
+  list: { pageSize: 50, maxPages: 5, maxAttempts: 2, maxRetries: 1, deadlineMs: 10_000 },
+  inspect: { maxAttempts: MCP_LIMITS.inspect.maxAttempts, deadlineMs: MCP_LIMITS.inspect.deadlineMs },
+  /** Live HTTP attempts per web server process (MARKETMIND_WEB_MAX_REQUESTS overrides). */
+  processRequests: { default: 2_000, max: 20_000 },
+  /** Attempts within any trailing five minutes (MARKETMIND_WEB_WINDOW_REQUESTS overrides). */
+  window: { requests: { default: 60, max: 600 }, windowMs: 300_000 },
+  /** Gamma keyset cursors are opaque; only this bounded, URL-safe form is accepted or passed on. */
+  cursorChars: 512,
+  skippedShown: 10,
+  outcomeLabelsShown: 10,
+} as const;
+
+export const WEB_CONTRACT = {
+  markets: "marketmind.web.list_markets/1",
+} as const;
+
 export const CONTRACT = {
   scan: "marketmind.scan_markets/1",
   inspect: "marketmind.inspect_market/1",
@@ -94,6 +116,14 @@ export const DetailsInput = obj({
   observationId: int(1, Number.MAX_SAFE_INTEGER).describe("observationId from get_market_history."),
   asOf: asOf.optional(),
   levels: int(0, L.details.levels.max).default(L.details.levels.default).describe("Captured price levels per side to return, in wire order."),
+});
+
+/** Opaque keyset cursor: URL-safe characters only, bounded. Never a URL. */
+export const Cursor = z.string().regex(new RegExp(`^[A-Za-z0-9_.~+/=-]{1,${WEB_LIMITS.cursorChars}}$`), "an opaque keyset cursor from a previous page");
+
+export const MarketsInput = obj({
+  version: z.enum(["v1", "v2"]).default("v1").describe("Protocol version to list."),
+  cursor: Cursor.optional().describe("nextCursor from the previous page; omit for the first page."),
 });
 
 // ---- outputs ----
@@ -298,6 +328,52 @@ export const InspectOutput = envelope(CONTRACT.inspect, ["ok", "invalid_book"], 
   ),
   requests: z.array(Request),
   budget: Budget,
+});
+
+const WindowBudget = obj({ limit: Count, windowMs: Count, used: Count, remaining: Count });
+const WebBudget = obj({ ...Budget.shape, window: WindowBudget.nullable() });
+
+/**
+ * One Gamma keyset page for the web Market Explorer. Metadata only: listing never fetches order
+ * books, so nothing here describes prices, spreads or depth. A null field means Gamma did not report it.
+ */
+export const MarketsOutput = envelope(WEB_CONTRACT.markets, ["ok", "empty"], {
+  volumeNote: z.string(),
+  appliedLimits: obj({ version: Protocol, order: z.literal("volume24hr"), pageSize: Count, maxAttempts: Count, deadlineMs: Count }),
+  query: obj({ cursor: Cursor.nullable() }),
+  markets: obj({
+    returnedCount: Count,
+    items: z
+      .array(
+        obj({
+          gammaId: z.string(),
+          conditionId: z.string(),
+          protocolVersion: Protocol,
+          question: z.string(),
+          slug: z.string(),
+          outcomeLabels: z.array(z.string()).max(WEB_LIMITS.outcomeLabelsShown),
+          outcomeCount: Count,
+          active: z.boolean(),
+          closed: z.boolean(),
+          acceptingOrders: z.boolean().nullable(),
+          enableOrderBook: z.boolean().nullable(),
+          negRisk: z.boolean().nullable(),
+          endDate: z.string().nullable(),
+          /** Gamma-reported 24h traded volume: ordering only, never liquidity or depth. */
+          gammaVolume24hr: z.string().nullable(),
+          eligibility: obj({ inspectable: z.boolean(), reasons: z.array(z.string()), warnings: z.array(z.string()) }),
+        }),
+      )
+      .max(WEB_LIMITS.list.pageSize),
+  }),
+  skipped: obj({ ...Truncation, items: z.array(obj({ id: z.string().nullable(), issues: z.array(z.string()) })).max(WEB_LIMITS.skippedShown) }),
+  pagination: obj({
+    nextCursor: Cursor.nullable(),
+    /** CURSOR_UNSUPPORTED: Gamma returned a cursor outside the accepted form, so paging stops here. */
+    stoppedReason: z.enum(["LAST_PAGE", "CURSOR_UNSUPPORTED"]).nullable(),
+  }),
+  request: Request,
+  budget: WebBudget,
 });
 
 const OwnerAssessment = z.enum(["RECOVERABLE", "OTHER_HOST", "OWNER_ALIVE", "OWNER_UNKNOWN", "HEARTBEAT_FRESH"]);
@@ -566,3 +642,5 @@ export type InspectOutput = z.infer<typeof InspectOutput>;
 export type RunsOutput = z.infer<typeof RunsOutput>;
 export type HistoryOutput = z.infer<typeof HistoryOutput>;
 export type DetailsOutput = z.infer<typeof DetailsOutput>;
+export type MarketsInput = z.infer<typeof MarketsInput>;
+export type MarketsOutput = z.infer<typeof MarketsOutput>;

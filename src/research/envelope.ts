@@ -70,7 +70,8 @@ export function describeError(error: unknown): ErrorOutput["error"] {
     case "InvalidBook":
       return e("upstream_invalid_data", error.message, false, { kind: error.kind, ...issues });
     case "BudgetExceeded":
-      return e("budget_exhausted", error.message, false, upstream);
+      // Only a rolling limit sets retryAfterMs; the lifetime ceiling never recovers within a process.
+      return d.retryAfterMs === undefined ? e("budget_exhausted", error.message, false, upstream) : e("budget_exhausted", error.message, true, { ...upstream, retryAfterMs: d.retryAfterMs });
     case "Cancelled":
       return code === "DEADLINE" ? e("deadline_exceeded", error.message, true, upstream) : e("cancelled", error.message, false, upstream);
     case "Storage":

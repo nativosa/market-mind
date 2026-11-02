@@ -1,4 +1,5 @@
 import type { InspectResult } from "../app/inspectMarket.js";
+import type { ListMarketsResult } from "../app/listMarkets.js";
 import type { HistoryResult, ObservationDetailsResult, RunsResult } from "../app/marketHistory.js";
 import type { ScanEntry, ScanResult } from "../app/scanMarkets.js";
 import { countScan } from "../app/scanMarkets.js";
@@ -7,8 +8,20 @@ import { decimalToString, type Decimal } from "../domain/decimal.js";
 import type { PriceLevel, RawLevel } from "../domain/orderbook.js";
 import type { Provenance } from "../domain/provenance.js";
 import type { StoredMetrics } from "../domain/snapshot.js";
-import { CONTRACT, MCP_LIMITS, type DetailsOutput, type HistoryOutput, type InspectOutput, type RunsOutput, type ScanOutput } from "./contracts.js";
-import type { LiveUsage, ProcessUsage } from "./liveGate.js";
+import {
+  CONTRACT,
+  Cursor,
+  MCP_LIMITS,
+  WEB_CONTRACT,
+  WEB_LIMITS,
+  type DetailsOutput,
+  type HistoryOutput,
+  type InspectOutput,
+  type MarketsOutput,
+  type RunsOutput,
+  type ScanOutput,
+} from "./contracts.js";
+import type { LiveUsage, ProcessUsage, WindowUsage } from "./liveGate.js";
 import { envelopeOf, untrusted } from "./envelope.js";
 
 const d = (v: Decimal | null): string | null => (v === null ? null : decimalToString(v));
@@ -498,4 +511,67 @@ export function detailsSummary(v: DetailsOutput): string {
     `get_observation_details ${o.observationId} (stored): market ${o.gammaId} (${o.protocolVersion}), run ${v.run.runId}, available ${o.availableAt} (${o.availabilityBasis}), ` +
     `pairing ${o.pairing}, books ${v.books.map((b) => `${b.outcomeIndex}:${b.quality}`).join(" ") || "none"}; spread ${m?.spread ?? "-"}.`
   );
+}
+
+// ---- web: list_markets ----
+
+export const VOLUME_NOTE =
+  "gammaVolume24hr is Gamma's reported 24h traded volume, used only to order the list. It is not liquidity or order-book depth; inspect a market to see its books.";
+const LISTING_LIMITATIONS = [
+  "Listing reads Gamma metadata only: no order book was fetched, so nothing here describes prices, spreads or depth.",
+  "Eligibility is computed from Gamma metadata; an inspectable market can still turn out to have an empty or invalid book.",
+  "A null field means Gamma did not report it, not that the value is false or zero.",
+];
+
+export interface WebBudgetView extends BudgetView {
+  window: WindowUsage | null;
+}
+
+export function marketsView(result: ListMarketsResult, budget: WebBudgetView, now: Date): MarketsOutput {
+  const L = WEB_LIMITS;
+  const next = result.nextCursor;
+  const cursorOk = next !== null && Cursor.safeParse(next).success;
+  const skipped = result.skipped.slice(0, L.skippedShown);
+  return {
+    ...envelopeOf(
+      WEB_CONTRACT.markets,
+      "live",
+      result.markets.length === 0 ? "empty" : "ok",
+      now,
+      ["markets.items[].question", "markets.items[].slug", "markets.items[].outcomeLabels[]", "skipped.items[].id", "skipped.items[].issues[]"],
+      LISTING_LIMITATIONS,
+    ),
+    volumeNote: VOLUME_NOTE,
+    appliedLimits: { version: result.query.version, order: "volume24hr", pageSize: result.query.limit, maxAttempts: L.list.maxAttempts, deadlineMs: L.list.deadlineMs },
+    query: { cursor: result.query.cursor ?? null },
+    markets: {
+      returnedCount: result.markets.length,
+      items: result.markets.map(({ market: m, eligibility }) => ({
+        gammaId: m.gammaId,
+        conditionId: m.conditionId,
+        protocolVersion: m.version,
+        question: question(m.question),
+        slug: untrusted(m.slug, MCP_LIMITS.questionChars),
+        outcomeLabels: m.outcomeLabels.slice(0, L.outcomeLabelsShown).map(label),
+        outcomeCount: m.outcomeLabels.length,
+        active: m.active,
+        closed: m.closed,
+        acceptingOrders: m.acceptingOrders,
+        enableOrderBook: m.enableOrderBook,
+        negRisk: m.negRisk,
+        endDate: m.endDate,
+        gammaVolume24hr: m.volume24hr === null ? null : String(m.volume24hr),
+        eligibility: { inspectable: eligibility.eligible, reasons: [...eligibility.reasons], warnings: [...eligibility.warnings] },
+      })),
+    },
+    skipped: {
+      returnedCount: skipped.length,
+      totalCount: result.skipped.length,
+      truncated: result.skipped.length > skipped.length,
+      items: skipped.map((x) => ({ id: x.id === null ? null : untrusted(x.id, 40), issues: x.issues.slice(0, 5).map((i) => untrusted(i, 300)) })),
+    },
+    pagination: { nextCursor: cursorOk ? next : null, stoppedReason: next === null ? "LAST_PAGE" : cursorOk ? null : "CURSOR_UNSUPPORTED" },
+    request: requestOf(result.provenance),
+    budget: { ...budgetOf(budget), window: budget.window && { ...budget.window } },
+  };
 }

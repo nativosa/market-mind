@@ -27,6 +27,8 @@ export interface ErrorDetails {
   issues?: string[];
   /** On a real failure (e.g. Upstream5xx): a retry was refused because the request budget was exhausted. */
   budgetExhausted?: boolean;
+  /** BudgetExceeded by a rolling limit: how long until the refused call would fit. */
+  retryAfterMs?: number;
   /** Machine-readable sub-code, e.g. Storage "DATABASE_BUSY" or NotFound "DATABASE_MISSING". */
   code?: string;
 }
