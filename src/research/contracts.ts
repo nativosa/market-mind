@@ -43,10 +43,21 @@ export const WEB_LIMITS = {
   rateLimitCooldownMs: 60_000,
   skippedShown: 10,
   outcomeLabelsShown: 10,
+  /** Stored-data routes (Stage 3.2): offline reads of the local database, never the live gate. */
+  storedMarkets: { limit: { default: 50, max: 100 }, maxOffset: 1_000_000 },
+  storedRuns: { limit: { default: 20, max: 100 } },
+  /**
+   * The newest observations of a market's analysis window returned for plotting. Statistics still use
+   * the whole analysis window (up to HISTORY_MAX_OBSERVATIONS = 20,000 observations).
+   */
+  history: { seriesMax: 2_000 },
 } as const;
 
 export const WEB_CONTRACT = {
   markets: "marketmind.web.list_markets/1",
+  storedMarkets: "marketmind.web.stored_markets/1",
+  storedRuns: "marketmind.web.collection_runs/1",
+  history: "marketmind.web.market_history/1",
   status: "marketmind.web.status/1",
   error: "marketmind.web.error/1",
 } as const;
@@ -136,6 +147,42 @@ export const Cursor = z
 export const MarketsInput = obj({
   version: z.enum(["v1", "v2"]).default("v1").describe("Protocol version to list."),
   cursor: Cursor.optional().describe("nextCursor from the previous page; omit for the first page."),
+});
+
+/**
+ * Provenance filter of the stored-data routes: "live" excludes synthetic (test or demonstration)
+ * runs and observations; "all" includes them, each marked by sourceType. Omitted, the server's
+ * default applies (live, except in a synthetic demonstration server).
+ */
+export const Source = z.enum(["live", "all"]);
+export type Source = z.infer<typeof Source>;
+
+const W = WEB_LIMITS;
+
+export const StoredMarketsInput = obj({
+  source: Source.optional(),
+  limit: int(1, W.storedMarkets.limit.max).default(W.storedMarkets.limit.default),
+  offset: int(0, W.storedMarkets.maxOffset).default(0),
+});
+
+export const WebRunsInput = obj({
+  source: Source.optional(),
+  limit: int(1, W.storedRuns.limit.max).default(W.storedRuns.limit.default),
+});
+
+export const WebHistoryInput = obj({
+  marketId: gammaId,
+  source: Source.optional(),
+  asOf: asOf.optional(),
+  spreadThreshold: unitDecimal.default("0.02"),
+  analyticsVersion: int(1, 1_000_000).default(ANALYTICS_VERSION),
+});
+
+export const WebDetailsInput = obj({
+  observationId: int(1, Number.MAX_SAFE_INTEGER),
+  source: Source.optional(),
+  asOf: asOf.optional(),
+  levels: int(0, L.details.levels.max).default(L.details.levels.default),
 });
 
 // ---- outputs ----
@@ -443,63 +490,71 @@ const StoredMetrics = obj({
 });
 
 const Stat = Dec.nullable();
+const SourceType = z.enum(["live", "synthetic"]);
+
+const HistoryAppliedLimits = obj({
+  marketId: z.string(),
+  asOf: Iso.nullable(),
+  limit: Count,
+  spreadThreshold: Dec,
+  analyticsVersion: Count,
+  includeSynthetic: z.boolean(),
+});
+
+/** The observations statistics are computed from: the newest up to maxObservations available by asOf. */
+const AnalysisWindow = obj({ observations: Count, truncated: z.boolean(), maxObservations: Count, oldestAvailableAt: Iso, newestAvailableAt: Iso });
+
+/** Sample-count statistics over every usable observation of the analysis window (never time-weighted). */
+const HistoryStats = obj({
+  eligible: Count,
+  usable: Count,
+  notUsable: z.record(z.string(), Count),
+  firstUsableAt: Iso.nullable(),
+  lastUsableAt: Iso.nullable(),
+  spread: obj({ n: Count, min: Stat, median: Stat, max: Stat, current: Stat, previous: Stat, change: Stat }),
+  topSize: obj({ n: Count, current: Stat, previous: Stat, change: Stat }),
+  threshold: obj({ n: Count, threshold: Dec, atOrAbove: Count, percentOfSamples: Stat }),
+  gaps: obj({ n: Count, minMs: Count.nullable(), medianMs: MedianMs.nullable(), maxMs: Count.nullable(), irregular: Count }),
+  states: obj({ n: Count, distinct: Count }),
+});
+
+const HistoryFlags = obj({
+  notUsable: z.string().nullable(),
+  unchanged: z.boolean().nullable(),
+  gapMs: Count.nullable(),
+  changes: z.array(z.string()),
+});
+
+/** Fields of one stored observation shared by get_market_history rows and the web history series. */
+const historyRowShape = {
+  observationId: Count,
+  runId: z.string(),
+  sourceType: SourceType,
+  /** Present only without `asOf`: a run's final status is later knowledge. */
+  runStatus: RunStatus.optional(),
+  availableAt: Iso,
+  availabilityBasis: z.enum(["paired_books", "single_book", "association", "discovery"]),
+  pairing: z.enum(["paired", "incomplete", "none"]),
+  association: z.enum(["confirmed", "mismatch", "failed", "not_attempted"]),
+  bucket: z.enum(["ranked", "filtered", "excluded", "failed", "notScanned"]),
+  reasonCodes: z.array(z.string()),
+  question: z.string(),
+  outcomeLabels: z.array(z.string()),
+  active: z.boolean(),
+  closed: z.boolean(),
+  acceptingOrders: z.boolean().nullable(),
+  endDate: z.string().nullable(),
+  books: z.array(obj({ outcomeIndex: Count, label: z.string(), quality: Quality, contentHash: z.string(), responseReceivedAt: Iso, serverTimestampIso: Iso.nullable() })),
+};
 
 export const HistoryOutput = envelope(CONTRACT.history, ["ok", "no_history"], {
   evidence: z.enum(["available", "insufficient"]),
-  appliedLimits: obj({
-    marketId: z.string(),
-    asOf: Iso.nullable(),
-    limit: Count,
-    spreadThreshold: Dec,
-    analyticsVersion: Count,
-    includeSynthetic: z.boolean(),
-  }),
-  analysisWindow: obj({ observations: Count, truncated: z.boolean(), maxObservations: Count, oldestAvailableAt: Iso, newestAvailableAt: Iso }).nullable(),
-  stats: obj({
-    eligible: Count,
-    usable: Count,
-    notUsable: z.record(z.string(), Count),
-    firstUsableAt: Iso.nullable(),
-    lastUsableAt: Iso.nullable(),
-    spread: obj({ n: Count, min: Stat, median: Stat, max: Stat, current: Stat, previous: Stat, change: Stat }),
-    topSize: obj({ n: Count, current: Stat, previous: Stat, change: Stat }),
-    threshold: obj({ n: Count, threshold: Dec, atOrAbove: Count, percentOfSamples: Stat }),
-    gaps: obj({ n: Count, minMs: Count.nullable(), medianMs: MedianMs.nullable(), maxMs: Count.nullable(), irregular: Count }),
-    states: obj({ n: Count, distinct: Count }),
-  }).nullable(),
+  appliedLimits: HistoryAppliedLimits,
+  analysisWindow: AnalysisWindow.nullable(),
+  stats: HistoryStats.nullable(),
   rows: obj({
     ...Truncation,
-    items: z.array(
-      obj({
-        observationId: Count,
-        runId: z.string(),
-        sourceType: z.enum(["live", "synthetic"]),
-        /** Present only without `asOf`: a run's final status is later knowledge. */
-        runStatus: RunStatus.optional(),
-        availableAt: Iso,
-        availabilityBasis: z.enum(["paired_books", "single_book", "association", "discovery"]),
-        pairing: z.enum(["paired", "incomplete", "none"]),
-        association: z.enum(["confirmed", "mismatch", "failed", "not_attempted"]),
-        bucket: z.enum(["ranked", "filtered", "excluded", "failed", "notScanned"]),
-        reasonCodes: z.array(z.string()),
-        question: z.string(),
-        outcomeLabels: z.array(z.string()),
-        active: z.boolean(),
-        closed: z.boolean(),
-        acceptingOrders: z.boolean().nullable(),
-        endDate: z.string().nullable(),
-        books: z.array(
-          obj({ outcomeIndex: Count, label: z.string(), quality: Quality, contentHash: z.string(), responseReceivedAt: Iso, serverTimestampIso: Iso.nullable() }),
-        ),
-        metrics: StoredMetrics.nullable(),
-        flags: obj({
-          notUsable: z.string().nullable(),
-          unchanged: z.boolean().nullable(),
-          gapMs: Count.nullable(),
-          changes: z.array(z.string()),
-        }),
-      }),
-    ),
+    items: z.array(obj({ ...historyRowShape, metrics: StoredMetrics.nullable(), flags: HistoryFlags })),
   }),
 });
 
@@ -619,6 +674,105 @@ export const DetailsOutput = envelope(CONTRACT.details, ["ok"], {
   }),
 });
 
+// ---- web stored-data outputs (Stage 3.2) ----
+
+/** Stored metrics of one analytics version, with the reference book's sizes and displayed depth. */
+const WebStoredMetrics = obj({
+  ...StoredMetrics.shape,
+  bestBidSize: Dec.nullable(),
+  bestAskSize: Dec.nullable(),
+  bidDepth: Dec.nullable(),
+  askDepth: Dec.nullable(),
+  bidBandDepth: Dec.nullable(),
+  askBandDepth: Dec.nullable(),
+  /** A per-run setting: band depths of observations with different bands are not comparable. */
+  depthBand: Dec.nullable(),
+  bidLevels: Count.nullable(),
+  askLevels: Count.nullable(),
+});
+
+/**
+ * One market's stored history for the browser: the same statistics and analysis window as
+ * get_market_history, plus a series of the newest observations of that window for plotting.
+ */
+export const WebHistoryOutput = envelope(WEB_CONTRACT.history, ["ok", "no_history"], {
+  evidence: z.enum(["available", "insufficient"]),
+  appliedLimits: obj({
+    marketId: z.string(),
+    source: Source,
+    asOf: Iso.nullable(),
+    spreadThreshold: Dec,
+    analyticsVersion: Count,
+    seriesMax: Count,
+  }),
+  analysisWindow: AnalysisWindow.nullable(),
+  stats: HistoryStats.nullable(),
+  series: obj({
+    /** Observations returned (newest first): the newest `returnedCount` of the analysis window's `windowObservations`. */
+    returnedCount: Count,
+    windowObservations: Count,
+    /** True when the series holds fewer observations than the analysis window the statistics use. */
+    truncated: z.boolean(),
+    oldestAvailableAt: Iso.nullable(),
+    newestAvailableAt: Iso.nullable(),
+    sourceCounts: obj({ live: Count, synthetic: Count }),
+    items: z
+      .array(
+        obj({
+          ...historyRowShape,
+          metrics: WebStoredMetrics.nullable(),
+          /** irregularGap: the gap since the previous usable observation exceeds twice the window's median gap. */
+          flags: obj({ ...HistoryFlags.shape, irregularGap: z.boolean() }),
+        }),
+      )
+      .max(WEB_LIMITS.history.seriesMax),
+  }),
+});
+
+/** Markets with stored observations, most recently observed first. Nothing here is fetched live. */
+export const StoredMarketsOutput = envelope(WEB_CONTRACT.storedMarkets, ["ok", "empty"], {
+  appliedLimits: obj({ source: Source, limit: Count, offset: Count }),
+  markets: obj({
+    returnedCount: Count,
+    hasMore: z.boolean(),
+    nextOffset: Count.nullable(),
+    items: z
+      .array(
+        obj({
+          gammaId: z.string(),
+          conditionId: z.string(),
+          protocolVersion: Protocol,
+          /** Stored observations within the source filter; liveObservations + syntheticObservations = observations. */
+          observations: Count,
+          liveObservations: Count,
+          syntheticObservations: Count,
+          firstAvailableAt: Iso,
+          lastAvailableAt: Iso,
+          /** The newest stored observation (within the source filter) describes the market. */
+          latest: obj({
+            observationId: Count,
+            runId: z.string(),
+            sourceType: SourceType,
+            runStatus: RunStatus,
+            question: z.string(),
+            outcomeLabels: z.array(z.string()).max(WEB_LIMITS.outcomeLabelsShown),
+            outcomeCount: Count,
+            active: z.boolean(),
+            closed: z.boolean(),
+          }),
+        }),
+      )
+      .max(WEB_LIMITS.storedMarkets.limit.max),
+  }),
+});
+
+/** list_collection_runs for the browser: the same runs view, naming the source filter that produced it. */
+export const WebRunsOutput = obj({
+  ...RunsOutput.shape,
+  contract: z.literal(WEB_CONTRACT.storedRuns),
+  appliedLimits: obj({ limit: Count, source: Source }),
+});
+
 export const ErrorCategory = z.enum([
   "invalid_arguments",
   "market_not_found",
@@ -688,3 +842,10 @@ export type HistoryOutput = z.infer<typeof HistoryOutput>;
 export type DetailsOutput = z.infer<typeof DetailsOutput>;
 export type MarketsInput = z.infer<typeof MarketsInput>;
 export type MarketsOutput = z.infer<typeof MarketsOutput>;
+export type StoredMarketsInput = z.infer<typeof StoredMarketsInput>;
+export type StoredMarketsOutput = z.infer<typeof StoredMarketsOutput>;
+export type WebRunsInput = z.infer<typeof WebRunsInput>;
+export type WebRunsOutput = z.infer<typeof WebRunsOutput>;
+export type WebHistoryInput = z.infer<typeof WebHistoryInput>;
+export type WebHistoryOutput = z.infer<typeof WebHistoryOutput>;
+export type WebDetailsInput = z.infer<typeof WebDetailsInput>;

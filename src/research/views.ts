@@ -1,13 +1,14 @@
 import type { InspectResult } from "../app/inspectMarket.js";
 import type { ListMarketsResult } from "../app/listMarkets.js";
-import type { HistoryResult, ObservationDetailsResult, RunsResult } from "../app/marketHistory.js";
+import type { HistoryResult, ObservationDetailsResult, RunsResult, StoredMarketsResult } from "../app/marketHistory.js";
 import type { ScanEntry, ScanResult } from "../app/scanMarkets.js";
 import { countScan } from "../app/scanMarkets.js";
 import { HISTORY_LIMITATIONS } from "../analytics/history.js";
 import { decimalToString, type Decimal } from "../domain/decimal.js";
 import type { PriceLevel, RawLevel } from "../domain/orderbook.js";
 import type { Provenance } from "../domain/provenance.js";
-import type { StoredMetrics } from "../domain/snapshot.js";
+import type { HistoryPoint, StoredMetrics } from "../domain/snapshot.js";
+import type { RowAnnotation } from "../analytics/history.js";
 import {
   CONTRACT,
   Cursor,
@@ -20,6 +21,10 @@ import {
   type MarketsOutput,
   type RunsOutput,
   type ScanOutput,
+  type Source,
+  type StoredMarketsOutput,
+  type WebHistoryOutput,
+  type WebRunsOutput,
   type WebStatusOutput,
 } from "./contracts.js";
 import type { CooldownGate, LiveUsage, ProcessUsage, WindowUsage } from "./liveGate.js";
@@ -367,58 +372,67 @@ const metricsOf = (m: StoredMetrics, asOfMs: number | null) => ({
   retrospective: asOfMs !== null && ms(m.computedAt) > asOfMs,
 });
 
+function analysisWindowOf(w: HistoryResult["analysisWindow"]): NonNullable<HistoryOutput["analysisWindow"]> {
+  return { observations: w.observations, truncated: w.truncated, maxObservations: w.maxObservations, oldestAvailableAt: w.oldestAvailableAt, newestAvailableAt: w.newestAvailableAt };
+}
+
+function statsOf(s: HistoryResult["stats"]): NonNullable<HistoryOutput["stats"]> {
+  return {
+    eligible: s.eligible,
+    usable: s.usable,
+    notUsable: { ...s.notUsable },
+    firstUsableAt: s.firstUsableAt,
+    lastUsableAt: s.lastUsableAt,
+    spread: { n: s.spread.n, min: d(s.spread.min), median: d(s.spread.median), max: d(s.spread.max), current: d(s.spread.current), previous: d(s.spread.previous), change: d(s.spread.change) },
+    topSize: { n: s.topSize.n, current: d(s.topSize.current), previous: d(s.topSize.previous), change: d(s.topSize.change) },
+    threshold: { n: s.threshold.n, threshold: decimalToString(s.threshold.threshold), atOrAbove: s.threshold.atOrAbove, percentOfSamples: d(s.threshold.percentOfSamples) },
+    gaps: { ...s.gaps },
+    states: { ...s.states },
+  };
+}
+
+/**
+ * One stored observation as a history row (shared by get_market_history and the web series).
+ * Without `asOf` the run's current status is included; with it, that later knowledge is withheld.
+ */
+export function historyRowView(p: HistoryPoint, flags: RowAnnotation, asOf: string | null): HistoryOutput["rows"]["items"][number] {
+  const asOfMs = asOf === null ? null : ms(asOf);
+  return {
+    observationId: p.observationId,
+    runId: p.runId,
+    sourceType: p.sourceType,
+    ...(asOf === null ? { runStatus: p.runStatus } : {}),
+    availableAt: p.availableAt,
+    availabilityBasis: p.availabilityBasis,
+    pairing: p.pairing,
+    association: p.association,
+    bucket: p.bucket,
+    reasonCodes: p.reasonCodes,
+    question: question(p.question),
+    outcomeLabels: p.outcomeLabels.map(label),
+    active: p.active,
+    closed: p.closed,
+    acceptingOrders: p.acceptingOrders,
+    endDate: p.endDate,
+    books: p.books.map((b) => ({ ...b, label: label(b.label) })),
+    metrics: p.metrics && metricsOf(p.metrics, asOfMs),
+    flags: { notUsable: flags.notUsable, unchanged: flags.unchanged, gapMs: flags.gapMs, changes: flags.changes },
+  };
+}
+
 export function historyView(result: HistoryResult, q: HistoryQueryView, rows: number, now: Date): HistoryOutput {
-  const s = result.stats;
-  const asOfMs = q.asOf === null ? null : ms(q.asOf);
   const shown = result.rows.slice(0, rows);
   return {
     ...envelopeOf(CONTRACT.history, "stored", "ok", now, HISTORY_UNTRUSTED, HISTORY_LIMITATIONS),
-    evidence: s.usable > 0 ? "available" : "insufficient",
+    evidence: result.stats.usable > 0 ? "available" : "insufficient",
     appliedLimits: appliedHistory(q),
-    analysisWindow: {
-      observations: result.analysisWindow.observations,
-      truncated: result.analysisWindow.truncated,
-      maxObservations: result.analysisWindow.maxObservations,
-      oldestAvailableAt: result.analysisWindow.oldestAvailableAt,
-      newestAvailableAt: result.analysisWindow.newestAvailableAt,
-    },
-    stats: {
-      eligible: s.eligible,
-      usable: s.usable,
-      notUsable: { ...s.notUsable },
-      firstUsableAt: s.firstUsableAt,
-      lastUsableAt: s.lastUsableAt,
-      spread: { n: s.spread.n, min: d(s.spread.min), median: d(s.spread.median), max: d(s.spread.max), current: d(s.spread.current), previous: d(s.spread.previous), change: d(s.spread.change) },
-      topSize: { n: s.topSize.n, current: d(s.topSize.current), previous: d(s.topSize.previous), change: d(s.topSize.change) },
-      threshold: { n: s.threshold.n, threshold: decimalToString(s.threshold.threshold), atOrAbove: s.threshold.atOrAbove, percentOfSamples: d(s.threshold.percentOfSamples) },
-      gaps: { ...s.gaps },
-      states: { ...s.states },
-    },
+    analysisWindow: analysisWindowOf(result.analysisWindow),
+    stats: statsOf(result.stats),
     rows: {
       returnedCount: shown.length,
       totalCount: result.analysisWindow.observations,
       truncated: shown.length < result.analysisWindow.observations,
-      items: shown.map(({ point: p, flags }) => ({
-        observationId: p.observationId,
-        runId: p.runId,
-        sourceType: p.sourceType,
-        ...(q.asOf === null ? { runStatus: p.runStatus } : {}),
-        availableAt: p.availableAt,
-        availabilityBasis: p.availabilityBasis,
-        pairing: p.pairing,
-        association: p.association,
-        bucket: p.bucket,
-        reasonCodes: p.reasonCodes,
-        question: question(p.question),
-        outcomeLabels: p.outcomeLabels.map(label),
-        active: p.active,
-        closed: p.closed,
-        acceptingOrders: p.acceptingOrders,
-        endDate: p.endDate,
-        books: p.books.map((b) => ({ ...b, label: label(b.label) })),
-        metrics: p.metrics && metricsOf(p.metrics, asOfMs),
-        flags: { notUsable: flags.notUsable, unchanged: flags.unchanged, gapMs: flags.gapMs, changes: flags.changes },
-      })),
+      items: shown.map(({ point, flags }) => historyRowView(point, flags, q.asOf)),
     },
   };
 }
@@ -575,6 +589,158 @@ export function marketsView(result: ListMarketsResult, budget: WebBudgetView, no
     pagination: { nextCursor: cursorOk ? next : null, stoppedReason: next === null ? "LAST_PAGE" : cursorOk ? null : "CURSOR_UNSUPPORTED" },
     request: requestOf(result.provenance),
     budget: { ...budgetOf(budget), window: budget.window && { ...budget.window } },
+  };
+}
+
+// ---- web: stored data (Stage 3.2) ----
+
+export const includesSynthetic = (source: Source): boolean => source === "all";
+
+const SYNTHETIC_NOTE =
+  "source 'all' includes synthetic (test or demonstration) observations, marked sourceType 'synthetic'. They are not market evidence, and the statistics then mix them with live observations.";
+const sourceLimitations = (source: Source) => (includesSynthetic(source) ? [SYNTHETIC_NOTE] : []);
+
+export interface WebHistoryQuery {
+  marketId: string;
+  source: Source;
+  asOf: string | null;
+  spreadThreshold: Decimal;
+  analyticsVersion: number;
+}
+
+const WEB_HISTORY_UNTRUSTED = ["series.items[].question", "series.items[].outcomeLabels[]", "series.items[].books[].label"];
+
+function webHistoryLimitations(q: WebHistoryQuery): string[] {
+  return [
+    `The series lists at most the newest ${WEB_LIMITS.history.seriesMax} observations of the analysis window; statistics use every observation in the window.`,
+    "Points are observations at their availableAt times. Nothing is known between them: do not connect, interpolate or time-weight them.",
+    ...sourceLimitations(q.source),
+    ...HISTORY_LIMITATIONS,
+  ];
+}
+
+function appliedWebHistory(q: WebHistoryQuery): WebHistoryOutput["appliedLimits"] {
+  return {
+    marketId: q.marketId,
+    source: q.source,
+    asOf: q.asOf,
+    spreadThreshold: decimalToString(q.spreadThreshold),
+    analyticsVersion: q.analyticsVersion,
+    seriesMax: WEB_LIMITS.history.seriesMax,
+  };
+}
+
+export function webNoHistoryView(q: WebHistoryQuery, now: Date): WebHistoryOutput {
+  return {
+    ...envelopeOf(WEB_CONTRACT.history, "stored", "no_history", now, WEB_HISTORY_UNTRUSTED, [
+      "No stored observation of this market matches the query. This is insufficient evidence, not evidence of absence.",
+      ...webHistoryLimitations(q),
+    ]),
+    evidence: "insufficient",
+    appliedLimits: appliedWebHistory(q),
+    analysisWindow: null,
+    stats: null,
+    series: { returnedCount: 0, windowObservations: 0, truncated: false, oldestAvailableAt: null, newestAvailableAt: null, sourceCounts: { live: 0, synthetic: 0 }, items: [] },
+  };
+}
+
+/** `result` must come from marketHistory with limit <= WEB_LIMITS.history.seriesMax. */
+export function webHistoryView(result: HistoryResult, q: WebHistoryQuery, now: Date): WebHistoryOutput {
+  const series = result.rows.slice(0, WEB_LIMITS.history.seriesMax);
+  return {
+    ...envelopeOf(WEB_CONTRACT.history, "stored", "ok", now, WEB_HISTORY_UNTRUSTED, webHistoryLimitations(q)),
+    evidence: result.stats.usable > 0 ? "available" : "insufficient",
+    appliedLimits: appliedWebHistory(q),
+    analysisWindow: analysisWindowOf(result.analysisWindow),
+    stats: statsOf(result.stats),
+    series: {
+      returnedCount: series.length,
+      windowObservations: result.analysisWindow.observations,
+      truncated: series.length < result.analysisWindow.observations,
+      oldestAvailableAt: series.at(-1)?.point.availableAt ?? null,
+      newestAvailableAt: series[0]?.point.availableAt ?? null,
+      sourceCounts: {
+        live: series.filter((r) => r.point.sourceType === "live").length,
+        synthetic: series.filter((r) => r.point.sourceType === "synthetic").length,
+      },
+      items: series.map(({ point, flags, irregularGap }) => {
+        const row = historyRowView(point, flags, q.asOf);
+        const m = point.metrics;
+        return {
+          ...row,
+          metrics: row.metrics && m && {
+            ...row.metrics,
+            bestBidSize: d(m.bestBidSize),
+            bestAskSize: d(m.bestAskSize),
+            bidDepth: d(m.bidDepth),
+            askDepth: d(m.askDepth),
+            bidBandDepth: d(m.bidBandDepth),
+            askBandDepth: d(m.askBandDepth),
+            depthBand: d(m.depthBand),
+            bidLevels: m.bidLevels,
+            askLevels: m.askLevels,
+          },
+          flags: { ...row.flags, irregularGap },
+        };
+      }),
+    },
+  };
+}
+
+export function storedMarketsView(result: StoredMarketsResult, q: { source: Source; limit: number; offset: number }, now: Date): StoredMarketsOutput {
+  const items = result.markets.slice(0, q.limit);
+  return {
+    ...envelopeOf(
+      WEB_CONTRACT.storedMarkets,
+      "stored",
+      items.length === 0 ? "empty" : "ok",
+      now,
+      ["markets.items[].latest.question", "markets.items[].latest.outcomeLabels[]"],
+      [
+        "Markets with locally stored observations, most recently observed first. Counts are stored observations, not market activity.",
+        "The newest stored observation describes each market; its question and labels may have changed since.",
+        "Offset paging: a collection that runs between pages can shift markets from one page to the next.",
+        ...sourceLimitations(q.source),
+      ],
+    ),
+    appliedLimits: { source: q.source, limit: q.limit, offset: q.offset },
+    markets: {
+      returnedCount: items.length,
+      hasMore: result.hasMore,
+      nextOffset: result.hasMore ? q.offset + items.length : null,
+      items: items.map((m) => ({
+        gammaId: m.gammaId,
+        conditionId: m.conditionId,
+        protocolVersion: m.protocolVersion,
+        observations: m.observations,
+        liveObservations: m.liveObservations,
+        syntheticObservations: m.syntheticObservations,
+        firstAvailableAt: m.firstAvailableAt,
+        lastAvailableAt: m.lastAvailableAt,
+        latest: {
+          observationId: m.latest.observationId,
+          runId: m.latest.runId,
+          sourceType: m.latest.sourceType,
+          runStatus: m.latest.runStatus,
+          question: question(m.latest.question),
+          outcomeLabels: m.latest.outcomeLabels.slice(0, WEB_LIMITS.outcomeLabelsShown).map(label),
+          outcomeCount: m.latest.outcomeLabels.length,
+          active: m.latest.active,
+          closed: m.latest.closed,
+        },
+      })),
+    },
+  };
+}
+
+/** `result` holds up to limit + 1 runs (one extra to learn whether more exist), already source-filtered. */
+export function webRunsView(result: RunsResult, q: { source: Source; limit: number }, thisHost: string, now: Date): WebRunsOutput {
+  const view = runsView(result, q.limit, q.limit, thisHost, now);
+  return {
+    ...view,
+    contract: WEB_CONTRACT.storedRuns,
+    limitations: [...view.limitations, ...sourceLimitations(q.source)],
+    appliedLimits: { limit: q.limit, source: q.source },
   };
 }
 
