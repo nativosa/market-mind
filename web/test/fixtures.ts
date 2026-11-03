@@ -43,7 +43,7 @@ export function page(items: MarketItem[], o: PageOptions = {}): Markets {
   const used = o.used ?? 1;
   return MarketsOutput.parse({
     contract: "marketmind.web.list_markets/1",
-    appVersion: "0.8.0",
+    appVersion: "0.9.0",
     generatedAt: new Date(NOW).toISOString(),
     source: "live",
     status: items.length === 0 ? "empty" : "ok",
@@ -73,7 +73,7 @@ export const range = (from: number, count: number, overrides: Partial<MarketItem
 
 export const status: Status = WebStatusOutput.parse({
   contract: "marketmind.web.status/1",
-  appVersion: "0.8.0",
+  appVersion: "0.9.0",
   generatedAt: new Date(NOW).toISOString(),
   readOnly: true,
   limits: { list: { pageSize: 50, maxAttempts: 2, deadlineMs: 10_000 }, inspect: { maxAttempts: 8, deadlineMs: 20_000, levels: { default: 5, max: 20 } }, rateLimitCooldownMs: 60_000 },

@@ -31,7 +31,7 @@ It also includes a bounded runner for repeated real investigations. The offline 
 - a bounded investigation of one real market on your own Claude subscription (`test-agent/live.ts`), and `collect --market-id` to build that market's history;
 - a controlled, paired pilot of `policy-v1` against `policy-v2`, closed at 10 runs. Its results are descriptive only: see [Controlled pilot (Stage 2.7)](#controlled-pilot-stage-27).
 
-**Stage 3.1** adds the **Web Explorer**: a local, read-only browser UI (React + Vite, served by a small Node HTTP server on `127.0.0.1`). Browse open markets, search and filter the loaded pages, and compare the two order books of one market with their quality, freshness and provenance. It never trades, and only the local server talks to Polymarket. See [Web Explorer (Stage 3.1)](#web-explorer-stage-31) and [`docs/web-explorer.md`](docs/web-explorer.md).
+**Stage 3.1** (v0.9.0) adds the **Web Explorer**: a local, read-only browser UI (React + Vite, served by a small Node HTTP server on `127.0.0.1`). Browse open markets, search and filter the loaded pages, and compare the two order books of one market with their quality, freshness and provenance. It never trades, and only the local server talks to Polymarket. See [Web Explorer (Stage 3.1)](#web-explorer-stage-31) and [`docs/web-explorer.md`](docs/web-explorer.md).
 
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
 

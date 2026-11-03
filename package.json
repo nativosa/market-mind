@@ -1,6 +1,6 @@
 {
   "name": "market-mind",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Read-only Polymarket research toolkit: order-book analytics, SQLite history, an MCP server and a Claude investigator (educational project).",
   "license": "MIT",
   "private": true,
