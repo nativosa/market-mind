@@ -62,6 +62,34 @@ test.describe("with the history fixture database", () => {
     expect(liveApi(net.api())).toEqual([]);
   });
 
+  test("market dashboard: statistics, three charts and the observation table, all offline", async ({ page, net, world }, info) => {
+    await page.goto("/#/history/market/1?source=all");
+    await expect(page.getByText("Statistics (sample counts, not time)")).toBeVisible();
+    await expect(page.getByText("Synthetic observations included")).toBeVisible();
+    await expect(page.locator("figure svg[role=img]")).toHaveCount(3);
+    await expect(page.getByText("Plotted values from 0.03 to 0.8")).toBeVisible();
+    await expect(page.getByText("Charts and table show all 8 of those 8")).toBeVisible();
+    const rows = page.locator("#observation-table-title + div tbody tr");
+    await expect(rows).toHaveCount(8);
+    await expect(rows.first()).toContainText("Synthetic");
+    await expect(page.locator("tbody")).toContainText("100.000000000000000001");
+    await expectNoHorizontalOverflow(page);
+    await screenshot(page, info, "history-market");
+
+    // A table row and a chart click select observations by address; nothing new is fetched for the history.
+    await page.locator("tbody button[id^=observation-]").nth(2).click();
+    await expect(page).toHaveURL(/#\/history\/market\/1\/obs\/\d+\?source=all$/);
+    await expect(page.locator("tbody tr[aria-selected=true]")).toHaveCount(1);
+    // The chart's click target spans the whole SVG; its right edge is the newest observation.
+    const hit = page.locator("figure svg[role=img]").first().locator("rect").last();
+    const box = (await hit.boundingBox())!;
+    await hit.click({ position: { x: box.width - 2, y: box.height / 2 } });
+    await expect(page).toHaveURL(/#\/history\/market\/1\/obs\/8\?source=all$/);
+    expect(storedApi(net.api()).filter((p) => p.includes("/history"))).toEqual(["/api/stored/markets/1/history?source=all"]);
+    expect(liveApi(net.api())).toEqual([]);
+    expect(await world.urls()).toEqual([]);
+  });
+
   test("opening the Live Explorer starts live listing; returning to history reloads nothing", async ({ page, net }) => {
     await page.goto("/#/history");
     await expect(page.getByText("Markets 1 to 2 with stored observations")).toBeVisible();

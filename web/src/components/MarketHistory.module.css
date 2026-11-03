@@ -38,3 +38,19 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.limitations {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.limitations ul {
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.limitationsTitle {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text);
+}

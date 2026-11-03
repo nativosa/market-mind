@@ -1,0 +1,164 @@
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.chart {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.range,
+.note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.plot {
+  fill: var(--surface-2);
+}
+
+.gap {
+  fill: var(--warn-soft);
+  stroke: var(--warn);
+  stroke-dasharray: 3 3;
+  stroke-width: 0.8;
+}
+
+.threshold {
+  stroke: var(--text-muted);
+  stroke-dasharray: 5 4;
+  stroke-width: 1;
+}
+
+.selection {
+  stroke: var(--focus);
+  stroke-width: 1.5;
+}
+
+.span {
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  opacity: 0.6;
+  fill: none;
+}
+
+.mark {
+  stroke-width: 1.6;
+}
+
+.stroke {
+  fill: none;
+  stroke-width: 2.6;
+}
+
+.bid {
+  fill: var(--ok);
+  stroke: var(--ok);
+}
+
+.ask {
+  fill: var(--danger);
+  stroke: var(--danger);
+}
+
+.mid {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+.spread {
+  fill: var(--warn);
+  stroke: var(--warn);
+}
+
+.hollow {
+  fill: var(--surface);
+  stroke-dasharray: 2 1;
+}
+
+.stroke.hollow {
+  fill: none;
+}
+
+.rug {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+}
+
+.hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.gapSwatch {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  background: var(--warn-soft);
+  border: 1px dashed var(--warn);
+}
+
+@media (max-width: 640px) {
+  .axis {
+    flex-direction: column;
+  }
+}
