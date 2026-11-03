@@ -3,11 +3,12 @@ import { formatTimestamp } from "../book";
 import { formatCount } from "../format";
 import type { HistoryState } from "../history";
 import { ResourceState } from "./ResourceState";
-import type { HistoryRoute } from "../route";
+import { focusSoon, type HistoryRoute } from "../route";
 import { HistoryCharts } from "./HistoryCharts";
 import { AnalysisWindowNote, HistoryStats } from "./HistoryStats";
 import { Notice } from "./Notice";
-import { ObservationTable } from "./ObservationTable";
+import { OBSERVATION_HEADING_ID, ObservationPanel } from "./ObservationPanel";
+import { observationButtonId, ObservationTable } from "./ObservationTable";
 import styles from "./MarketHistory.module.css";
 
 export const HISTORY_HEADING_ID = "history-market-heading";
@@ -28,21 +29,52 @@ export function marketTitle(state: HistoryState, marketId: string): string {
   return fromHistory ?? fromList ?? `Market ${marketId}`;
 }
 
-/** One market's stored history: what was observed, when, and from which sources. */
-export function MarketHistory({ state, route, now, onRetry, onRoute }: MarketHistoryProps) {
+/**
+ * One market's stored history, and the selected observation's evidence beside it (above it on
+ * narrow screens). The history stays loaded while observations are opened and closed.
+ */
+export function MarketHistory({ state, route, now, onRetry, onRetryObservation, onRoute }: MarketHistoryProps) {
   const { data, loading, error } = state.history;
-  const onSelect = (observationId: number) => onRoute({ ...route, observationId });
+  const onSelect = (observationId: number) => {
+    onRoute({ ...route, observationId });
+    focusSoon(OBSERVATION_HEADING_ID);
+  };
+  const onClose = () => {
+    const closed = route.observationId;
+    onRoute({ ...route, observationId: null });
+    if (closed !== null) focusSoon(observationButtonId(closed));
+  };
+  const observation = state.observation;
+  const panelOpen = route.observationId !== null;
+  // Only the requested observation's answer is shown (another key is still loading or stale).
+  const shown = observation.key !== null && observation.key.startsWith(`${route.observationId}|`) ? observation : null;
   return (
-    <section className={styles.market} aria-labelledby={HISTORY_HEADING_ID}>
-      <h2 id={HISTORY_HEADING_ID} className={styles.question} tabIndex={-1}>
-        {marketTitle(state, route.marketId)}
-      </h2>
-      {data === null || error !== null ? (
-        <ResourceState loading={loading} error={error} now={now} label="this market's stored history" onRetry={onRetry} />
-      ) : (
-        <HistoryBody history={data} selectedId={route.observationId} onSelect={onSelect} />
+    <div className={`${styles.layout} ${panelOpen ? styles.withPanel : ""}`}>
+      <section className={styles.market} aria-labelledby={HISTORY_HEADING_ID}>
+        <h2 id={HISTORY_HEADING_ID} className={styles.question} tabIndex={-1}>
+          {marketTitle(state, route.marketId)}
+        </h2>
+        {data === null || error !== null ? (
+          <ResourceState loading={loading} error={error} now={now} label="this market's stored history" onRetry={onRetry} />
+        ) : (
+          <HistoryBody history={data} selectedId={route.observationId} onSelect={onSelect} />
+        )}
+      </section>
+      {panelOpen && (
+        <div className={styles.panelColumn}>
+          <ObservationPanel
+            route={route}
+            data={shown?.data ?? null}
+            loading={shown?.loading ?? true}
+            error={shown?.error ?? null}
+            now={now}
+            analyticsVersion={data?.appliedLimits.analyticsVersion ?? null}
+            onRetry={onRetryObservation}
+            onClose={onClose}
+          />
+        </div>
       )}
-    </section>
+    </div>
   );
 }
 

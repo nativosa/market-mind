@@ -165,7 +165,8 @@ export function Ladder({ outcome, depth, scale }: { outcome: Outcome; depth: num
   );
 }
 
-function LadderSide({ side, levels, scale, label }: { side: "bid" | "ask"; levels: readonly Level[]; scale: number; label: string }) {
+/** One side's price levels in the order given (never re-sorted here); `orderNote` says which order that is. */
+export function LadderSide({ side, levels, scale, label, orderNote = "best price first" }: { side: "bid" | "ask"; levels: readonly Level[]; scale: number; label: string; orderNote?: string }) {
   const name = side === "bid" ? "Bids" : "Asks";
   if (levels.length === 0) {
     return (
@@ -179,7 +180,10 @@ function LadderSide({ side, levels, scale, label }: { side: "bid" | "ask"; level
     <table className={`${styles.sideTable} ${styles[side]}`}>
       <caption className={styles.sideTitle}>
         {name}
-        <span className="visually-hidden"> for {label}, best price first</span>
+        <span className="visually-hidden">
+          {" "}
+          for {label}, {orderNote}
+        </span>
       </caption>
       <thead>
         <tr>

@@ -127,6 +127,11 @@
   min-width: 14em;
 }
 
+/* Wide screens: scroll inside the frame rather than squeeze columns (the evidence panel may sit beside it). */
+.wrap .table {
+  min-width: 1040px;
+}
+
 .section {
   display: flex;
   flex-direction: column;
@@ -187,6 +192,10 @@
 
 /* Narrow screens: each row becomes a card. */
 @media (max-width: 720px) {
+  .wrap .table {
+    min-width: 0;
+  }
+
   .wrap {
     border: 0;
     background: none;

@@ -93,8 +93,15 @@ export function navigateHistory(win: Pick<RouteWindow, "location">, route: Histo
 
 export const marketButtonId = (id: string): string => `market-${id}`;
 
-/** Move keyboard focus to an element once React has painted it (no-op outside a browser). */
-export function focusSoon(elementId: string): void {
+/**
+ * Move keyboard focus to an element once React has painted it (no-op outside a browser). After a
+ * hash navigation the element may appear a few frames later, so a missing element is retried briefly.
+ */
+export function focusSoon(elementId: string, frames = 10): void {
   if (typeof document === "undefined" || typeof requestAnimationFrame === "undefined") return;
-  requestAnimationFrame(() => document.getElementById(elementId)?.focus({ preventScroll: false }));
+  requestAnimationFrame(() => {
+    const element = document.getElementById(elementId);
+    if (element) element.focus({ preventScroll: false });
+    else if (frames > 1) focusSoon(elementId, frames - 1);
+  });
 }

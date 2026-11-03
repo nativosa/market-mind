@@ -90,6 +90,43 @@ test.describe("with the history fixture database", () => {
     expect(await world.urls()).toEqual([]);
   });
 
+  test("observation evidence: opened from the table, kept across Back and Forward, never fetched live", async ({ page, net, world }, info) => {
+    await page.goto("/#/history/market/1");
+    await expect(page.getByText("Statistics (sample counts, not time)")).toBeVisible();
+    await page.locator("#observation-1").click();
+    await expect(page).toHaveURL(/#\/history\/market\/1\/obs\/1$/);
+    const panel = page.getByRole("complementary", { name: "Observation #1" });
+    await expect(panel).toContainText("Stored evidence exactly as recorded by collect");
+    await expect(panel).toContainText("100.000000000000000001");
+    await expect(panel).toContainText("in the order Polymarket sent them, not re-sorted");
+    await expect(panel).toContainText("At collection");
+    await expect(page.locator("#observation-heading")).toBeFocused();
+    await expectNoHorizontalOverflow(page);
+    await screenshot(page, info, "history-observation");
+
+    await page.goBack();
+    await expect(page).toHaveURL(/#\/history\/market\/1$/);
+    await expect(panel).toHaveCount(0);
+    await expect(page.getByText("Statistics (sample counts, not time)")).toBeVisible();
+    await page.goForward();
+    await expect(page.getByRole("complementary", { name: "Observation #1" })).toContainText("At collection");
+    await page.getByRole("button", { name: "Close observation" }).click();
+    await expect(page).toHaveURL(/#\/history\/market\/1$/);
+
+    // One history read and one observation read in all: navigation reuses what is loaded.
+    expect(storedApi(net.api())).toEqual(["/api/stored/markets/1/history", "/api/stored/observations/1?levels=50"]);
+    expect(liveApi(net.api())).toEqual([]);
+    expect(await world.urls()).toEqual([]);
+  });
+
+  test("a synthetic observation is hidden under Live only and shown, marked, with Live + synthetic", async ({ page }) => {
+    await page.goto("/#/history/market/1/obs/8");
+    await expect(page.getByText("This observation is not available")).toBeVisible();
+    await page.getByRole("radio", { name: "Live + synthetic" }).click();
+    await expect(page).toHaveURL(/#\/history\/market\/1\/obs\/8\?source=all$/);
+    await expect(page.getByText("Synthetic observation: test or demonstration data, not market evidence.")).toBeVisible();
+  });
+
   test("opening the Live Explorer starts live listing; returning to history reloads nothing", async ({ page, net }) => {
     await page.goto("/#/history");
     await expect(page.getByText("Markets 1 to 2 with stored observations")).toBeVisible();

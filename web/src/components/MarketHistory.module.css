@@ -1,3 +1,36 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.withPanel {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+}
+
+.panelColumn {
+  position: sticky;
+  top: var(--space-4);
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow-y: auto;
+  min-width: 0;
+}
+
+@media (max-width: 1080px) {
+  .withPanel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Narrow screens: the evidence comes first; the history stays mounted below it. */
+  .panelColumn {
+    order: -1;
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 .market {
   display: flex;
   flex-direction: column;

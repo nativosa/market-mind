@@ -1,3 +1,4 @@
+import { mkdirSync, rmSync } from "node:fs";
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import { realHttpDeps } from "../src/adapters/polymarket/httpClient.js";
@@ -9,7 +10,6 @@ import { createWebServer, type WebServer } from "../src/web/server.js";
 import { staticRootOf } from "../src/web/static.js";
 import { TEST_HTTP_OPTIONS } from "../test/helpers.js";
 import { seedEmpty, seedHistory } from "../test/historySeed.js";
-import { cleanupTemp } from "../test/storageFixtures.js";
 import { CLOB, createUpstream, GAMMA, type Upstream } from "./upstream.js";
 
 // E2E entry point (test-only; never imported by the application). It runs, all on 127.0.0.1:
@@ -35,7 +35,11 @@ export interface Limits {
   db?: "missing" | "empty" | "history";
 }
 
-const databases = { missing: "unused-e2e.sqlite", empty: seedEmpty(), history: seedHistory().path };
+// A fixed, git-ignored folder, recreated on every start: the server may be killed without cleanup.
+const dbDir = resolve("test-results/e2e-db");
+rmSync(dbDir, { recursive: true, force: true });
+mkdirSync(dbDir, { recursive: true });
+const databases = { missing: "unused-e2e.sqlite", empty: seedEmpty(resolve(dbDir, "empty.sqlite")), history: seedHistory(resolve(dbDir, "history.sqlite")).path };
 
 let upstream: Upstream = createUpstream();
 let web: WebServer | null = null;
@@ -97,10 +101,7 @@ let stopping = false;
 const stop = () => {
   if (stopping) return;
   stopping = true;
-  void Promise.allSettled([web?.close(), vite.close(), new Promise((done) => controlServer.close(done))]).then(() => {
-    cleanupTemp();
-    process.exit(0);
-  });
+  void Promise.allSettled([web?.close(), vite.close(), new Promise((done) => controlServer.close(done))]).then(() => process.exit(0));
 };
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);

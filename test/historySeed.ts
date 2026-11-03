@@ -43,12 +43,13 @@ export interface Seeded {
 }
 
 /**
+ * Without `path`, a fresh temporary file (removed by cleanupTemp).
+ *
  * Market 1 (live, plus one synthetic sample): regular one-minute samples, an exact 18-place size, an
  * unpaired sample, an invalid book, a one-sided book, a 30-minute gap. Market 2: synthetic only.
  * Market 3: a single live observation.
  */
-export function seedHistory(): Seeded {
-  const path = tempDbPath("history.sqlite");
+export function seedHistory(path: string = tempDbPath("history.sqlite")): Seeded {
   const db = openMigrated(path);
   const ids: Record<string, number> = {};
   const gamma = { question: UNTRUSTED_QUESTION };
@@ -67,8 +68,7 @@ export function seedHistory(): Seeded {
 }
 
 /** A migrated database with nothing stored. */
-export function seedEmpty(): string {
-  const path = tempDbPath("empty.sqlite");
+export function seedEmpty(path: string = tempDbPath("empty.sqlite")): string {
   openMigrated(path).close();
   return path;
 }
