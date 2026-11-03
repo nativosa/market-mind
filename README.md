@@ -31,6 +31,8 @@ It also includes a bounded runner for repeated real investigations. The offline 
 - a bounded investigation of one real market on your own Claude subscription (`test-agent/live.ts`), and `collect --market-id` to build that market's history;
 - a controlled, paired pilot of `policy-v1` against `policy-v2`, closed at 10 runs. Its results are descriptive only: see [Controlled pilot (Stage 2.7)](#controlled-pilot-stage-27).
 
+**Stage 3.1** adds the **Web Explorer**: a local, read-only browser UI (React + Vite, served by a small Node HTTP server on `127.0.0.1`). Browse open markets, search and filter the loaded pages, and compare the two order books of one market with their quality, freshness and provenance. It never trades, and only the local server talks to Polymarket. See [Web Explorer (Stage 3.1)](#web-explorer-stage-31) and [`docs/web-explorer.md`](docs/web-explorer.md).
+
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
 
 **What to keep in mind when reading any output:**
@@ -54,6 +56,8 @@ npm run cli -- runs                                     # stored collection runs
 npm run cli -- history --market-id <gammaId>            # stored history and sample-count statistics (offline)
 npm run verify                                          # typecheck, lint and the offline test suite
 ```
+
+For the browser UI, run `npm run web` and open <http://127.0.0.1:4317>. Opening it makes one bounded live market-list request; see [Web Explorer (Stage 3.1)](#web-explorer-stage-31).
 
 For an AI investigation, open Claude Code in the repository, approve the `marketmind` MCP server, and type `/investigate-market <gammaId>`. See [Setup with Claude Code](#setup-with-claude-code). It uses your Claude usage.
 
@@ -642,6 +646,22 @@ The investigator shipped in `.claude/` since commit `5f4065c` is `policy-v2`. It
 - The grader, rubrics, policies and recorded results are unchanged. Raw runs stay local, under `.eval-out/`.
 - The pilot logs warn that the temp project's allow rules were ignored as untrusted. This does not affect the boundary: see the finding in [`docs/stage-2.7-experiment.md`](docs/stage-2.7-experiment.md#finding-the-permission-warning-in-the-pilot-logs).
 
+## Web Explorer (Stage 3.1)
+
+```bash
+npm ci
+npm run web        # build the UI and serve it with its API at http://127.0.0.1:4317
+npm run web:dev    # development: API + Vite dev server with hot reload at http://127.0.0.1:5173
+```
+
+- **Read-only and local.** The server binds to `127.0.0.1` only and refuses foreign `Host` and `Origin` headers. The browser calls only `/api/...` on its own origin; only the server makes public `GET` requests to Polymarket. No wallets, keys or SQLite writes.
+- **Live on open.** Opening the production app makes one bounded Gamma request (the first page of open V1 markets). Everything else is an explicit click: load more, inspect, refresh, retry. Nothing polls or retries on its own.
+- **Local search.** Search, filters and sorting cover **only the loaded pages** (at most 5 pages, 250 markets per version), never the whole Polymarket catalog.
+- **Budgets.** At most 2,000 upstream attempts per server process and 60 per rolling 5 minutes (`MARKETMIND_WEB_MAX_REQUESTS`, `MARKETMIND_WEB_WINDOW_REQUESTS`). A listing uses at most 2 attempts and an inspection at most 8; a call that does not fit is refused before any request. An upstream 429 pauses all live calls for 60 seconds.
+- **Honest data.** Exact decimal strings, missing values shown as missing, invalid books with metrics withheld, Polymarket's book timestamps shown apart from local receive times, and the gap between the two book requests (they are not one snapshot). **A quoted spread is not a guaranteed profit or an executable opportunity.**
+
+Endpoints, security model, cancellation and cooldown behaviour, Windows notes and troubleshooting: [`docs/web-explorer.md`](docs/web-explorer.md).
+
 ## Architecture
 
 ```
@@ -658,8 +678,9 @@ src/
   web/        local read-only HTTP API (node:http, 127.0.0.1 only) over src/research, plus the built UI's static files
 bin/marketmind-mcp.mjs   portable MCP launcher (any working directory, no shell wrapper)
 web/          React + Vite Market Explorer (browser only; imports nothing from src/ but src/research/contracts.ts)
-bin/marketmind-web.mjs       portable web server launcher (Stage 3.1, in progress)
+bin/marketmind-web.mjs       portable web server launcher (Stage 3.1)
 bin/marketmind-web-dev.mjs   development: API server + Vite dev server together, no shell needed
+test-e2e/     Playwright suite: real server + production build over an offline fixture Polymarket
 ```
 
 Dependencies point inward: `cli`/`mcp`/`web → research → app → adapters/analytics/domain`. ESLint enforces these boundaries (each file group has exactly one combined import rule, so no rule silently overrides another):
@@ -680,7 +701,9 @@ npm run typecheck   # tsc --noEmit (strict)
 npm run lint        # eslint (typescript-eslint, type-checked)
 npm test            # offline Vitest suite; real fetch is disabled
 npm run coverage    # v8 coverage with thresholds (90% core modules, 75% global)
-npm run verify      # typecheck + lint + coverage
+npm run verify      # typecheck + lint + coverage (no browser needed)
+npm run e2e:install # once per machine: Playwright's Chromium for the E2E suite
+npm run e2e         # build the web UI, then run the offline Playwright suite (desktop and phone viewports)
 npm run smoke       # OPT-IN live smoke test against public endpoints
 npx tsx test-agent/eval/baselineArchive.ts verify   # offline: needs the local v0.5.0 archive (docs/evaluation-archive/)
 npm run agent -- investigate --market-id 900103 --fixture S03 --dry-run   # no credentials, no spawn, no API call
@@ -736,7 +759,7 @@ Assumptions:
 - **The MCP server runs TypeScript through `tsx`** (a devDependency), so it needs a normal `npm ci`, not `--omit=dev`.
 - **Development-only audit advisories.** `npm audit --omit=dev` reports 0 vulnerabilities. A full `npm audit` reports 11 moderate advisories in development tooling, all from one issue (minimatch GHSA-g3hv-75wg-m249) through ESLint and typescript-eslint. npm's suggested fix is a downgrade to eslint 4.0.0, so they remain until those tools move on.
 - **Scope.** Polymarket access is read-only and on-demand: there is no streaming, scheduling, monitoring or trading. Repeated collection is your explicit decision; there is no background mode.
-- **There is no web interface.** MarketMind is a CLI, an MCP server and Claude Code project files.
+- **The Web Explorer is local and single-user.** It searches only the pages it has loaded, keeps nothing between sessions, and its budget figures update only after a request. An aborted inspection may already have used upstream attempts. Its live behaviour against Polymarket is covered by a bounded manual smoke session, not by automated tests; the automated suites run against fixtures.
 - **The investigator's quality is not validated.** Both policies were evaluated only on synthetic scenarios, with small samples and no independent human review. A report can misread or overstate evidence it cites correctly.
 - **The CLI harnesses print a trust warning.** In each fresh temp project, Claude Code ignores the project-scope allow rules. The same rules are passed with `--settings`, and the tool pool is set by `--tools ""`, so the warning is expected and harmless.
 
