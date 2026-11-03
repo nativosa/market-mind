@@ -7,7 +7,7 @@ import { createWebServer, httpStatusOf } from "../../src/web/server.js";
 import { fixture, json, timeoutError } from "../helpers.js";
 import { V1_ROUTES, V2_ROUTES } from "../routes.js";
 import { assetId, bookBody, gammaRecord, scanRoutes, type MarketSpec } from "../scanFixtures.js";
-import { closeAllWeb, get, startWeb, WEB_CONFIG, WEB_NOW, type HttpReply } from "../webFixtures.js";
+import { closeAllWeb, get, MISSING_DB, startWeb, TEST_LIVENESS, WEB_CONFIG, WEB_NOW, type HttpReply } from "../webFixtures.js";
 
 // Stage 3.1 local web API: real node:http server on an ephemeral 127.0.0.1 port, fake upstream fetch.
 
@@ -56,6 +56,8 @@ describe("GET /api/status", () => {
       limits: { list: { pageSize: 50, maxAttempts: 2, deadlineMs: 10_000 }, inspect: { maxAttempts: 8, deadlineMs: 20_000 }, rateLimitCooldownMs: 60_000 },
       budget: { process: { limit: 100, used: 0, remaining: 100 }, window: { limit: 60, windowMs: 300_000, used: 0, remaining: 60 } },
       rateLimit: { coolingDown: false, retryAfterMs: 0 },
+      live: { enabled: true },
+      stored: { defaultSource: "live", database: "missing" },
     });
     expect(r.headers).toMatchObject({
       "content-type": "application/json; charset=utf-8",
@@ -296,7 +298,17 @@ describe("errors never leak internals", () => {
       run: () => Promise.reject(new TypeError("boom reading C:\\Users\\someone\\secret.sqlite with MARKETMIND_DB=x")),
     };
     const logs: string[] = [];
-    const web = createWebServer({ gate, config: WEB_CONFIG, devOrigins: [], staticRoot: null, now: () => WEB_NOW, log: (l) => logs.push(l) });
+    const web = createWebServer({
+      gate,
+      config: WEB_CONFIG,
+      liveEnabled: true,
+      stored: { dbPath: MISSING_DB, defaultSource: "live" },
+      liveness: TEST_LIVENESS,
+      devOrigins: [],
+      staticRoot: null,
+      now: () => WEB_NOW,
+      log: (l) => logs.push(l),
+    });
     const port = await web.listen(0);
     try {
       const r = await get(port, "/api/markets");

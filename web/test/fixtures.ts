@@ -79,6 +79,8 @@ export const status: Status = WebStatusOutput.parse({
   limits: { list: { pageSize: 50, maxAttempts: 2, deadlineMs: 10_000 }, inspect: { maxAttempts: 8, deadlineMs: 20_000, levels: { default: 5, max: 20 } }, rateLimitCooldownMs: 60_000 },
   budget: { process: { limit: 2_000, used: 0, remaining: 2_000 }, window: { limit: 60, windowMs: 300_000, used: 0, remaining: 60 } },
   rateLimit: { coolingDown: false, retryAfterMs: 0 },
+  live: { enabled: true },
+  stored: { defaultSource: "live", database: "missing" },
 });
 
 export function serverError(category: string, code: string | null, details: Record<string, unknown> = {}, retryable = true) {

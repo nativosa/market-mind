@@ -746,7 +746,13 @@ export function webRunsView(result: RunsResult, q: { source: Source; limit: numb
 
 // ---- web: status ----
 
-export function webStatusView(gate: CooldownGate, now: Date): WebStatusOutput {
+export interface WebStatusFacts {
+  liveEnabled: boolean;
+  defaultSource: Source;
+  databasePresent: boolean;
+}
+
+export function webStatusView(gate: CooldownGate, facts: WebStatusFacts, now: Date): WebStatusOutput {
   const L = WEB_LIMITS;
   const cooldown = gate.cooldownRemainingMs;
   const window = gate.window;
@@ -762,5 +768,7 @@ export function webStatusView(gate: CooldownGate, now: Date): WebStatusOutput {
     },
     budget: { process: { ...gate.process }, window: window && { ...window } },
     rateLimit: { coolingDown: cooldown > 0, retryAfterMs: cooldown },
+    live: { enabled: facts.liveEnabled },
+    stored: { defaultSource: facts.defaultSource, database: facts.databasePresent ? "present" : "missing" },
   };
 }

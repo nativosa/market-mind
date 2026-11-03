@@ -116,8 +116,9 @@ export default tseslint.config(
       ],
     ),
   },
-  // Web: the local HTTP API over the research layer. A loopback socket and read-only static files
-  // only: no SQLite, storage, collection, processes, agents, MCP or CLI.
+  // Web: the local HTTP API over the research layer. A loopback socket, read-only static files and
+  // (Stage 3.2) stored data read only through app/marketHistory: no direct SQLite or storage access,
+  // no collection, processes, agents, MCP or CLI.
   {
     files: ["src/web/**/*.ts"],
     rules: restrict(
@@ -131,7 +132,8 @@ export default tseslint.config(
       ],
       [
         { group: ["**/cli/**", "**/mcp/**"], message: "The web server must not depend on the CLI or MCP." },
-        { group: ["**/adapters/storage/**", "**/app/collectMarkets*", "**/agent-sdk/**", "**/test-agent/**"], message: "The web server never touches storage, collects or runs agents." },
+        { group: ["**/adapters/storage/*", "!**/adapters/storage/processLiveness.js"], message: "The web server reads storage only through app/marketHistory (read-only)." },
+        { group: ["**/app/collectMarkets*", "**/agent-sdk/**", "**/test-agent/**"], message: "The web server never collects or runs agents." },
         MCP_SDK,
       ],
     ),

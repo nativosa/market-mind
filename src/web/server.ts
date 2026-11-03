@@ -37,6 +37,9 @@ export function httpStatusOf(error: ErrorBody): number {
       return 403;
     case "market_not_found":
     case "route_not_found":
+    case "database_missing":
+    case "observation_not_found":
+    case "observation_not_available_as_of":
       return 404;
     case "method_not_allowed":
       return 405;
@@ -54,6 +57,9 @@ export function httpStatusOf(error: ErrorBody): number {
       return 502;
     case "deadline_exceeded":
       return 504;
+    case "storage_error":
+      // A busy database (a collection holding a lock) clears; a missing schema or a corrupt file does not.
+      return error.retryable ? 503 : 500;
     default:
       return 500;
   }
@@ -117,6 +123,9 @@ export function createWebServer(deps: WebDeps): WebServer {
       const match = matchRoute(path);
       if (!match) return sendError(refusal("route_not_found", "ROUTE_NOT_FOUND", "No such API route."));
       label = match.route.name;
+      if (match.route.live && !deps.liveEnabled) {
+        return sendError(refusal("forbidden", "LIVE_DISABLED", "Live Polymarket requests are disabled on this server; only stored data is available."));
+      }
       const query = new URLSearchParams(q === -1 ? "" : target.slice(q + 1));
       const controller = new AbortController();
       if (match.route.live) {

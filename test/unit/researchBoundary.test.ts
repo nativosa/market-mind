@@ -41,11 +41,24 @@ describe("research layer boundary", () => {
 });
 
 describe("web server boundary", () => {
-  it("the web server reaches no storage, SQLite, collection, MCP, CLI, agents or child processes", () => {
+  it("the web server reaches no collection, MCP, CLI, agents or child processes", () => {
     const { files, packages } = graph("src/web/main.ts");
     expect(files).toContain("src/web/server.ts");
-    expect(files.filter((f) => /^src\/(mcp|cli|adapters\/storage)\/|collectMarkets|^agent-sdk\/|^test-agent\//.test(f))).toEqual([]);
-    expect(packages.filter((p) => /^node:(sqlite|child_process|net|https|fs|worker_threads)$|^@modelcontextprotocol\//.test(p))).toEqual([]);
-    expect(packages.filter((p) => p.startsWith("node:")).sort()).toEqual(["node:fs/promises", "node:http", "node:path"]);
+    expect(files.filter((f) => /^src\/(mcp|cli)\/|collectMarkets|recompute|^agent-sdk\/|^test-agent\//.test(f))).toEqual([]);
+    expect(packages.filter((p) => /^node:(child_process|net|https|worker_threads)$|^@modelcontextprotocol\//.test(p))).toEqual([]);
+  });
+
+  it("Stage 3.2: storage is reached only through the read-only app/marketHistory module", () => {
+    const { files, packages } = graph("src/web/main.ts");
+    expect(files.filter((f) => f.startsWith("src/adapters/storage/"))).toEqual([
+      "src/adapters/storage/migrations.ts",
+      "src/adapters/storage/processLiveness.ts",
+      "src/adapters/storage/snapshotStore.ts",
+      "src/adapters/storage/sqlite.ts",
+    ]);
+    // Direct importers of storage modules: only the read-only app module (and storage itself); main.ts takes the liveness probe.
+    const importers = files.filter((f) => !f.startsWith("src/adapters/storage/") && /from\s+"[^"]*adapters\/storage\/(?!processLiveness)/.test(readFileSync(resolve(ROOT, f), "utf8")));
+    expect(importers).toEqual(["src/app/marketHistory.ts"]);
+    expect(packages.filter((p) => p.startsWith("node:")).sort()).toEqual(["node:crypto", "node:fs", "node:fs/promises", "node:http", "node:os", "node:path", "node:sqlite"]);
   });
 });

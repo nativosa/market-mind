@@ -1,6 +1,7 @@
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import { realHttpDeps } from "../src/adapters/polymarket/httpClient.js";
+import { realLiveness } from "../src/adapters/storage/processLiveness.js";
 import { DEFAULT_CONFIG } from "../src/config/config.js";
 import { WEB_LIMITS } from "../src/research/contracts.js";
 import { createLiveGate, withRateLimitCooldown } from "../src/research/liveGate.js";
@@ -39,7 +40,17 @@ async function start(limits: Limits): Promise<void> {
     createLiveGate({ ...realHttpDeps, fetch: upstream.fetch }, limits.processLimit ?? 2_000, { window: { limit: limits.windowLimit ?? 60, windowMs: WEB_LIMITS.window.windowMs } }),
     WEB_LIMITS.rateLimitCooldownMs,
   );
-  web = createWebServer({ gate, config, devOrigins: [DEV_ORIGIN], staticRoot, now: () => new Date(), log: () => undefined });
+  web = createWebServer({
+    gate,
+    config,
+    liveEnabled: true,
+    stored: { dbPath: config.dbPath, defaultSource: "live" },
+    liveness: realLiveness,
+    devOrigins: [DEV_ORIGIN],
+    staticRoot,
+    now: () => new Date(),
+    log: () => undefined,
+  });
   await web.listen(WEB_PORT);
 }
 

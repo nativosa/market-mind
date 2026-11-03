@@ -1,5 +1,6 @@
 import { request, type IncomingHttpHeaders } from "node:http";
 import type { FetchFn } from "../src/adapters/polymarket/httpClient.js";
+import type { Liveness } from "../src/adapters/storage/processLiveness.js";
 import { DEFAULT_CONFIG } from "../src/config/config.js";
 import { WEB_LIMITS } from "../src/research/contracts.js";
 import { createLiveGate, withRateLimitCooldown, type RollingWindowLimit } from "../src/research/liveGate.js";
@@ -50,7 +51,16 @@ export interface WebOptions {
   window?: RollingWindowLimit;
   staticRoot?: string | null;
   devOrigins?: string[];
+  /** Database the stored routes read (default: a path that does not exist). */
+  dbPath?: string;
+  defaultSource?: "live" | "all";
+  liveEnabled?: boolean;
+  liveness?: Liveness;
 }
+
+/** A path no test database ever uses: stored routes report the database missing. */
+export const MISSING_DB = "no-such-dir/missing.sqlite";
+export const TEST_LIVENESS: Liveness = { hostname: () => "test-host", probe: () => "gone" };
 
 const running: WebServer[] = [];
 
@@ -79,6 +89,9 @@ export async function startWeb(options: WebOptions = {}) {
   const web = createWebServer({
     gate,
     config: WEB_CONFIG,
+    liveEnabled: options.liveEnabled ?? true,
+    stored: { dbPath: options.dbPath ?? MISSING_DB, defaultSource: options.defaultSource ?? "live" },
+    liveness: options.liveness ?? TEST_LIVENESS,
     devOrigins: options.devOrigins ?? [],
     staticRoot: options.staticRoot ?? null,
     now: () => WEB_NOW,

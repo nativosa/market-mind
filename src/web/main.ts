@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { realHttpDeps } from "../adapters/polymarket/httpClient.js";
+import { realLiveness } from "../adapters/storage/processLiveness.js";
 import { APP_VERSION } from "../config/config.js";
 import { isMarketMindError } from "../domain/errors.js";
 import { WEB_LIMITS } from "../research/contracts.js";
@@ -17,7 +18,17 @@ try {
   const settings = webSettings(process.env);
   const gate = withRateLimitCooldown(createLiveGate(realHttpDeps, settings.processLimit, { window: settings.window }), WEB_LIMITS.rateLimitCooldownMs);
   const staticRoot = await staticRootOf(resolve(STATIC_DIR));
-  const web = createWebServer({ gate, config: settings.config, devOrigins: settings.devOrigins, staticRoot, now: () => new Date(), log });
+  const web = createWebServer({
+    gate,
+    config: settings.config,
+    liveEnabled: true,
+    stored: { dbPath: settings.config.dbPath, defaultSource: "live" },
+    liveness: realLiveness,
+    devOrigins: settings.devOrigins,
+    staticRoot,
+    now: () => new Date(),
+    log,
+  });
   try {
     await web.listen(settings.port);
   } catch (error) {

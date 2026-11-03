@@ -11,6 +11,11 @@ import type { HistoryPoint, ObservationDetail, RunRecord, RunStatus, StoredMarke
 /** Most recent observations analysed per history query (bounded memory: metrics only, no levels). */
 export const HISTORY_MAX_OBSERVATIONS = 20_000;
 
+/** Whether the database file exists. Nothing is opened or created; schema and contents are checked on read. */
+export function databasePresent(dbPath: string): boolean {
+  return existsSync(dbPath);
+}
+
 /** Read-only (query_only) open of an existing, current-schema database. Never creates a file. */
 function openExisting(dbPath: string): Database {
   if (!existsSync(dbPath)) {

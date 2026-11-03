@@ -832,6 +832,13 @@ export const WebStatusOutput = obj({
   }),
   budget: obj({ process: obj({ limit: Count, used: Count, remaining: Count }), window: WindowBudget.nullable() }),
   rateLimit: obj({ coolingDown: z.boolean(), retryAfterMs: Count }),
+  /** False on a server that must never call Polymarket (e.g. a synthetic demonstration): live routes are refused. */
+  live: obj({ enabled: z.boolean() }),
+  /**
+   * Stored-data routes: the source filter applied when a request names none, and whether the local
+   * database file exists (its schema and contents are checked by the stored routes themselves).
+   */
+  stored: obj({ defaultSource: Source, database: z.enum(["present", "missing"]) }),
 });
 export type WebStatusOutput = z.infer<typeof WebStatusOutput>;
 
