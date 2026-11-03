@@ -123,6 +123,12 @@ export function createHistoryStore(api: ApiClient, options: StoreOptions = {}): 
   function sync(r: HistoryRoute): void {
     route = r;
     const keys = keysFor(r, state);
+    // A request the route no longer shows (an observation closed while loading, a list left for a
+    // market) is cancelled; it is sent again if the route comes back. A request whose resource still
+    // shows earlier rows (more runs) finishes, since its rows stand for the requested list.
+    for (const resource of Object.keys(controllers) as ResourceName[]) {
+      if (keys[resource] === undefined && state[resource].data === null) controllers[resource]?.abort();
+    }
     for (const [resource, key] of Object.entries(keys) as [ResourceName, string][]) {
       if (needsRequest(state[resource], key)) request(resource, key, r);
     }

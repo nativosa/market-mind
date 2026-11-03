@@ -175,7 +175,7 @@ function bookObservation(market: DemoMarket, index: number, book: Book, received
       min_order_size: "5",
       tick_size: "0.001",
       neg_risk: false,
-      last_trade_price: null,
+      last_trade_price: bids.at(-1)?.[0] ?? null,
     },
     requested,
     { source: "clob", endpoint: "/book", url: `${CLOB_URL}/book?token_id=${requested}`, httpStatus: 200, timing: timing(receivedMs) },

@@ -72,3 +72,21 @@ export function seedEmpty(path: string = tempDbPath("empty.sqlite")): string {
   openMigrated(path).close();
   return path;
 }
+
+/** Observations in the large fixture: more than the web history series shows (2,000). */
+export const LARGE_COUNT = 2_050;
+
+/**
+ * Market 4 with LARGE_COUNT live observations one minute apart (one run each, as collect stores
+ * them), the spread cycling through three values. Written with synchronous=OFF: a fixture only.
+ */
+export function seedLarge(path: string = tempDbPath("large.sqlite"), count = LARGE_COUNT): string {
+  const db = openMigrated(path);
+  db.exec("PRAGMA synchronous = OFF");
+  for (let i = 0; i < count; i++) {
+    const ask = ["0.45", "0.46", "0.48"][i % 3]!;
+    observe(db, { id: "4", atMs: i * MINUTE, ref: { bids: [["0.40", String(100 + (i % 50))]], asks: [[ask, "75"]] } });
+  }
+  db.close();
+  return path;
+}

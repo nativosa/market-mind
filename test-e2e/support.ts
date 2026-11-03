@@ -4,11 +4,14 @@ import { test as base, expect, type Locator, type Page, type TestInfo } from "@p
 import { E2E_PORTS } from "./ports.js";
 
 // Shared E2E fixtures. Before every test the server is reset (fresh budgets, cooldown and upstream
-// log). After every test: no unexpected upstream URL, every upstream URL on a fixture host, and
-// every browser request on the app's own origin (or the dev server's, for the StrictMode check).
+// log). After every test: no unexpected upstream URL, every upstream URL on a fixture host, no
+// upstream request at all from the synthetic demo, the database files byte-for-byte unchanged, no
+// Content Security Policy violation, and every browser request on the app's own origin (or the dev
+// server's, for the StrictMode check, or the demo's).
 
 export const APP = `http://127.0.0.1:${E2E_PORTS.web}`;
 export const DEV = `http://127.0.0.1:${E2E_PORTS.dev}`;
+export const DEMO = `http://127.0.0.1:${E2E_PORTS.demo}`;
 const CONTROL = `http://127.0.0.1:${E2E_PORTS.control}`;
 export const SCREENSHOTS = "test-results/e2e-screenshots";
 
@@ -16,7 +19,7 @@ export interface Limits {
   processLimit?: number;
   windowLimit?: number;
   /** The database the stored routes read (test-e2e/server.ts). */
-  db?: "missing" | "empty" | "history";
+  db?: "missing" | "empty" | "history" | "large";
 }
 
 export interface World {
@@ -40,11 +43,15 @@ export const test = base.extend<{ limits: Limits; world: World; net: Net }>({
     async ({ limits }, use) => {
       const reset = await fetch(`${CONTROL}/reset`, { method: "POST", body: JSON.stringify(limits) });
       expect(reset.ok).toBe(true);
-      const log = async () => (await (await fetch(`${CONTROL}/log`)).json()) as { urls: string[]; unexpected: string[] };
+      const log = async () => (await (await fetch(`${CONTROL}/log`)).json()) as { urls: string[]; unexpected: string[]; demoUrls: string[] };
+      const databases = async () => (await (await fetch(`${CONTROL}/db`)).json()) as unknown;
+      const before = await databases();
       await use({ urls: async () => (await log()).urls });
-      const { urls, unexpected } = await log();
+      const { urls, unexpected, demoUrls } = await log();
       expect(unexpected, "upstream URLs outside the fixtures").toEqual([]);
       for (const url of urls) expect(url).toMatch(/^https:\/\/(gamma|clob)\.example\//);
+      expect(demoUrls, "upstream requests from the offline demo").toEqual([]);
+      expect(await databases(), "database files changed by a read-only server").toEqual(before);
     },
     { auto: true },
   ],
@@ -52,14 +59,19 @@ export const test = base.extend<{ limits: Limits; world: World; net: Net }>({
     async ({ page }, use) => {
       const requests: string[] = [];
       const failed: string[] = [];
+      const csp: string[] = [];
       page.on("request", (r) => requests.push(r.url()));
+      page.on("console", (m) => {
+        if (/content security policy/i.test(m.text())) csp.push(m.text());
+      });
       page.on("requestfailed", (r) => failed.push(pathOf(r.url())));
       const api = () => requests.filter((u) => u.startsWith("http") && new URL(u).pathname.startsWith("/api/")).map(pathOf);
       await use({ requests, failed, api, inspections: () => api().filter((p) => p.includes("/inspect")) });
       for (const url of requests) {
         if (url.startsWith("data:")) continue;
-        expect([APP, DEV], `browser request to ${url}`).toContain(new URL(url).origin);
+        expect([APP, DEV, DEMO], `browser request to ${url}`).toContain(new URL(url).origin);
       }
+      expect(csp, "Content Security Policy violations").toEqual([]);
     },
     { auto: true },
   ],

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createApiClient, type ApiClient } from "./api";
 import { App, defaultRouteWindow } from "./App";
 import { DemoBanner } from "./components/DemoBanner";
@@ -71,16 +71,29 @@ export function Root({ api: injected, clock = Date.now, routeWindow = defaultRou
   });
   const history = useSyncExternalStore(store.subscribe, store.getState, store.getState);
   const { status, statusError } = history;
+  // Landing on the start page (no address) of a server without live requests opens Stored History
+  // instead; a later visit to the Live Explorer (its link, Back) shows why it is disabled.
+  const landing = useRef(state.route.section === "live" && state.route.marketId === null);
 
-  useEffect(() => (routeWindow ? watchAppRoute(routeWindow, (route, hash) => setState((previous) => rootStateFor(route, hash, previous))) : undefined), [routeWindow]);
+  useEffect(() => {
+    if (!routeWindow) return undefined;
+    let first = true; // the watcher reports the current route at once: that is still the landing
+    return watchAppRoute(routeWindow, (route, hash) => {
+      if (!first) landing.current = false;
+      first = false;
+      setState((previous) => rootStateFor(route, hash, previous));
+    });
+  }, [routeWindow]);
   useEffect(() => store.loadStatus(), [store]);
 
   const liveEnabled = status?.live.enabled ?? true;
   const live = state.route.section === "live";
-  const startPage = state.route.section === "live" && state.route.marketId === null;
   useEffect(() => {
-    if (routeWindow && !liveEnabled && startPage) replaceHash(routeWindow, historyHash(HISTORY_HOME));
-  }, [routeWindow, liveEnabled, startPage]);
+    if (routeWindow && !liveEnabled && landing.current) {
+      landing.current = false;
+      replaceHash(routeWindow, historyHash(HISTORY_HOME));
+    }
+  }, [routeWindow, liveEnabled]);
 
   const nav = navFor(state, liveEnabled);
   const connection = status !== null ? "connected" : statusError !== null ? "unreachable" : "checking";

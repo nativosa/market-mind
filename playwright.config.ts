@@ -5,7 +5,7 @@ import { E2E_PORTS } from "./test-e2e/ports.js";
 // against test-e2e/server.ts: the real web server and built UI over a fixture upstream. One worker,
 // because every test resets the shared server (budgets, cooldown, upstream log) before it starts.
 
-const { web: WEB_PORT, control: CONTROL_PORT, dev: DEV_PORT } = E2E_PORTS;
+const { web: WEB_PORT, control: CONTROL_PORT, dev: DEV_PORT, demo: DEMO_PORT } = E2E_PORTS;
 
 export default defineConfig({
   testDir: "test-e2e",
@@ -31,7 +31,7 @@ export default defineConfig({
   webServer: {
     command: "node node_modules/tsx/dist/cli.mjs test-e2e/server.ts",
     url: `http://127.0.0.1:${CONTROL_PORT}/health`,
-    env: { E2E_WEB_PORT: String(WEB_PORT), E2E_CONTROL_PORT: String(CONTROL_PORT), E2E_DEV_PORT: String(DEV_PORT) },
+    env: { E2E_WEB_PORT: String(WEB_PORT), E2E_CONTROL_PORT: String(CONTROL_PORT), E2E_DEV_PORT: String(DEV_PORT), E2E_DEMO_PORT: String(DEMO_PORT) },
     reuseExistingServer: false,
     timeout: 60_000,
     stdout: "pipe",

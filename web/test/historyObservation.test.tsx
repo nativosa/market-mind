@@ -8,7 +8,7 @@ import { initialHistoryState, type HistoryState } from "../src/history";
 import { createHistoryStore } from "../src/historyStore";
 import type { HistoryRoute } from "../src/route";
 import { NOW } from "./fixtures";
-import { cleanupHistory, EXACT_SIZE, ok, pendingApi, SEED_TIMEOUT_MS, sharedHistory, storedServer } from "./historyFixtures";
+import { cleanupHistory, EXACT_SIZE, flush, ok, pendingApi, SEED_TIMEOUT_MS, sharedHistory, storedServer } from "./historyFixtures";
 import { button, call, expand, findAll, html, text } from "./render";
 
 // Stage 3.2 Commit 6: the stored observation evidence panel, rendered from real API answers.
@@ -183,7 +183,7 @@ describe("market page with an observation open", () => {
     expect(routes).toEqual([route(null, "all"), route(ids.second, "all")]);
   });
 
-  it("opening another observation aborts the previous request; the history is not requested again", () => {
+  it("opening another observation aborts the previous request; the history is not requested again", async () => {
     const { api, pending } = pendingApi();
     const store = createHistoryStore(api);
     store.sync(route(ids.first));
@@ -191,7 +191,23 @@ describe("market page with an observation open", () => {
     expect(pending.map((p) => p.method)).toEqual(["history", "observation", "observation"]);
     expect(pending[1]!.signal.aborted).toBe(true);
     expect(pending[0]!.signal.aborted).toBe(false);
-    store.sync(route(null)); // close: nothing new
+    store.sync(route(null)); // close: nothing new, and the observation still loading is cancelled
     expect(pending).toHaveLength(3);
+    expect(pending[2]!.signal.aborted).toBe(true);
+    expect(pending[0]!.signal.aborted).toBe(false);
+    await flush();
+    store.sync(route(ids.second)); // reopened: requested again
+    expect(pending.map((p) => p.method)).toEqual(["history", "observation", "observation", "observation"]);
+  });
+
+  it("leaving a list that is still loading for a market cancels the list", () => {
+    const { api, pending } = pendingApi();
+    const store = createHistoryStore(api);
+    store.sync({ section: "history", page: "markets", source: null });
+    store.sync(route(null));
+    expect(pending.map((p) => [p.method, p.signal.aborted])).toEqual([
+      ["storedMarkets", true],
+      ["history", false],
+    ]);
   });
 });

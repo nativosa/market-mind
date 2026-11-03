@@ -255,6 +255,9 @@ describe("bounded output", () => {
   it("a long history returns at most 2,000 plotted observations while statistics cover the whole window", { timeout: 120_000 }, async () => {
     const path = tempDbPath();
     const db = openMigrated(path);
+    // A throwaway fixture: without an fsync per commit its ~6,000 transactions take about 2 s instead
+    // of about a minute of disk flushes that stall the other workers' SQLite tests.
+    db.exec("PRAGMA synchronous = OFF");
     const question = `Q${"x".repeat(1_000)}?`; // truncated to the shared untrusted-text bound
     // One observation per run (a market is observed at most once per run), as collect stores them.
     for (let i = 0; i < 2_050; i++) observe(db, { ...at(i * 60_000), gamma: { question } });
