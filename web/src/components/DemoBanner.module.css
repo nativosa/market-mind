@@ -1,0 +1,24 @@
+.banner {
+  padding: var(--space-2) var(--space-5);
+  background: var(--warn-soft);
+  border-bottom: 2px solid var(--warn);
+  color: var(--text);
+}
+
+.title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.text {
+  margin: 0;
+  font-size: var(--text-sm);
+  max-width: 110ch;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .banner {
+    padding: var(--space-2) var(--space-4);
+  }
+}

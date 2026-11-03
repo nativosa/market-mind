@@ -78,6 +78,15 @@
   box-shadow: var(--shadow), inset 0 -2px 0 var(--accent);
 }
 
+.unavailable {
+  color: var(--text-muted);
+}
+
+.unavailable .linkNote {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 .linkNote {
   font-weight: 400;
   font-size: var(--text-xs);

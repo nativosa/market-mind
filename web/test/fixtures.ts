@@ -80,7 +80,7 @@ export const status: Status = WebStatusOutput.parse({
   budget: { process: { limit: 2_000, used: 0, remaining: 2_000 }, window: { limit: 60, windowMs: 300_000, used: 0, remaining: 60 } },
   rateLimit: { coolingDown: false, retryAfterMs: 0 },
   live: { enabled: true },
-  stored: { defaultSource: "live", database: "missing" },
+  stored: { mode: "normal", defaultSource: "live", database: "missing" },
 });
 
 export function serverError(category: string, code: string | null, details: Record<string, unknown> = {}, retryable = true) {

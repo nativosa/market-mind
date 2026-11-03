@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { createApiClient, type ApiClient } from "./api";
+import { createApiClient, type ApiClient, type Status } from "./api";
 import { Controls } from "./components/Controls";
 import { DETAIL_HEADING_ID, DetailPanel } from "./components/DetailPanel";
 import { Header, type NavProps } from "./components/Header";
@@ -21,6 +21,8 @@ export interface AppProps {
   routeWindow?: RouteWindow | null;
   /** Section links (Root supplies where each section was left). */
   nav?: NavProps;
+  /** Server status already read (by Root): used instead of reading it again on mount. */
+  status?: Status | null;
 }
 
 export const defaultRouteWindow = (): RouteWindow | null => (typeof window === "undefined" ? null : window);
@@ -35,16 +37,20 @@ function useNow(clock: () => number, intervalMs: number): number {
   return now;
 }
 
-export function App({ api: injected, clock = Date.now, initial, routeWindow = defaultRouteWindow(), nav }: AppProps) {
+export function App({ api: injected, clock = Date.now, initial, routeWindow = defaultRouteWindow(), nav, status = null }: AppProps) {
   const api = useMemo(() => injected ?? createApiClient(), [injected]);
-  const [state, dispatch] = useReducer(reducer, initial ?? initialState());
+  const [state, dispatch] = useReducer(reducer, null, () => {
+    const start = initial ?? initialState();
+    return status === null ? start : reducer(start, { type: "status", status });
+  });
+  const statusKnown = useRef(status !== null);
   const now = useNow(clock, 1_000);
   const latest = useRef(state);
   latest.current = state;
   const controller = useMemo(() => createController(api, dispatch, () => latest.current), [api]);
 
   useEffect(() => {
-    controller.loadStatus();
+    if (!statusKnown.current) controller.loadStatus();
     return () => controller.dispose();
   }, [controller]);
 

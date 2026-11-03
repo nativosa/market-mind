@@ -35,6 +35,8 @@ export interface HistoryState extends Resources {
   /** Most recent runs requested (grows by "Show more runs", up to the API maximum). */
   runsLimit: number;
   status: Status | null;
+  /** Why /api/status could not be read (null: read, loading or not asked yet). */
+  statusError: ApiError | null;
 }
 
 export type HistoryAction =
@@ -43,12 +45,13 @@ export type HistoryAction =
   | { type: "failed"; resource: ResourceName; requestId: number; error: ApiError }
   | { type: "offset"; offset: number }
   | { type: "runs_limit"; limit: number }
-  | { type: "status"; status: Status };
+  | { type: "status"; status: Status }
+  | { type: "status_failed"; error: ApiError };
 
 export const emptyResource = <T>(): Resource<T> => ({ key: null, requestId: 0, loading: false, data: null, receivedAt: null, error: null });
 
 export function initialHistoryState(): HistoryState {
-  return { markets: emptyResource(), runs: emptyResource(), history: emptyResource(), observation: emptyResource(), marketsOffset: 0, runsLimit: RUNS_STEP, status: null };
+  return { markets: emptyResource(), runs: emptyResource(), history: emptyResource(), observation: emptyResource(), marketsOffset: 0, runsLimit: RUNS_STEP, status: null, statusError: null };
 }
 
 const sourceKey = (source: Source | null) => source ?? "default";
@@ -94,7 +97,9 @@ export function historyReducer(state: HistoryState, action: HistoryAction): Hist
     case "runs_limit":
       return { ...state, runsLimit: Math.min(RUNS_MAX, Math.max(1, action.limit)) };
     case "status":
-      return { ...state, status: action.status };
+      return { ...state, status: action.status, statusError: null };
+    case "status_failed":
+      return action.error.kind === "aborted" ? state : { ...state, statusError: action.error };
   }
 }
 

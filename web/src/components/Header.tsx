@@ -35,7 +35,12 @@ export function Header({ connection, budget = null, nav = DEFAULT_NAV }: HeaderP
         <span className={styles.badge}>Research only · no trading</span>
       </div>
       <nav className={styles.nav} aria-label="Sections">
-        <a href={nav.liveHref} className={styles.link} aria-current={live ? "page" : undefined} title="Browses Polymarket: listing and inspecting send live requests">
+        <a
+          href={nav.liveHref}
+          className={`${styles.link} ${nav.liveEnabled ? "" : styles.unavailable}`}
+          aria-current={live ? "page" : undefined}
+          title={nav.liveEnabled ? "Browses Polymarket: listing and inspecting send live requests" : "This server makes no Polymarket requests"}
+        >
           Live Explorer
           <span className={styles.linkNote}>{nav.liveEnabled ? "requests Polymarket" : "disabled on this server"}</span>
         </a>

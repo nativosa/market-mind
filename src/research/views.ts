@@ -748,6 +748,7 @@ export function webRunsView(result: RunsResult, q: { source: Source; limit: numb
 
 export interface WebStatusFacts {
   liveEnabled: boolean;
+  mode: "normal" | "demo";
   defaultSource: Source;
   databasePresent: boolean;
 }
@@ -769,6 +770,6 @@ export function webStatusView(gate: CooldownGate, facts: WebStatusFacts, now: Da
     budget: { process: { ...gate.process }, window: window && { ...window } },
     rateLimit: { coolingDown: cooldown > 0, retryAfterMs: cooldown },
     live: { enabled: facts.liveEnabled },
-    stored: { defaultSource: facts.defaultSource, database: facts.databasePresent ? "present" : "missing" },
+    stored: { mode: facts.mode, defaultSource: facts.defaultSource, database: facts.databasePresent ? "present" : "missing" },
   };
 }

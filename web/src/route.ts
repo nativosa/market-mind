@@ -50,7 +50,8 @@ export function historyHash(route: HistoryRoute): string {
 
 /** The parts of `window` the route needs, so tests can supply a fake. */
 export interface RouteWindow {
-  location: { hash: string };
+  /** `replace` (a browser's location has it) changes the hash without adding a history entry. */
+  location: { hash: string; replace?: (url: string) => void };
   addEventListener(type: "hashchange", listener: () => void): void;
   removeEventListener(type: "hashchange", listener: () => void): void;
 }
@@ -89,6 +90,13 @@ export function navigate(win: Pick<RouteWindow, "location">, id: string | null):
 export function navigateHistory(win: Pick<RouteWindow, "location">, route: HistoryRoute): void {
   const target = historyHash(route);
   if (win.location.hash !== target) win.location.hash = target;
+}
+
+/** Point the hash at `hash` in place: Back does not return to the replaced address. */
+export function replaceHash(win: Pick<RouteWindow, "location">, hash: string): void {
+  if (win.location.hash === hash) return;
+  if (win.location.replace) win.location.replace(hash);
+  else win.location.hash = hash;
 }
 
 export const marketButtonId = (id: string): string => `market-${id}`;

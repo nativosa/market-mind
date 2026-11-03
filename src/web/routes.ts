@@ -43,6 +43,8 @@ export interface StoredDeps {
   dbPath: string;
   /** Applied when a request names no `source`: "live" normally; "all" only for a synthetic demonstration database. */
   defaultSource: Source;
+  /** "demo": a synthetic demonstration database (npm run web:demo); the browser labels everything as such. Default "normal". */
+  mode?: "normal" | "demo";
 }
 
 export interface RouteDeps extends LiveCallDeps {
@@ -98,7 +100,7 @@ const utc = (iso: string | undefined) => (iso === undefined ? null : new Date(is
 function status({ deps, query }: RouteContext): Promise<unknown> {
   queryOf(query, []);
   // Only whether the file exists: no path, and the database is not opened here.
-  const facts = { liveEnabled: deps.liveEnabled, defaultSource: deps.stored.defaultSource, databasePresent: databasePresent(deps.stored.dbPath) };
+  const facts = { liveEnabled: deps.liveEnabled, mode: deps.stored.mode ?? "normal", defaultSource: deps.stored.defaultSource, databasePresent: databasePresent(deps.stored.dbPath) };
   return Promise.resolve(WebStatusOutput.parse(webStatusView(deps.gate, facts, deps.now())));
 }
 

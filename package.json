@@ -14,6 +14,7 @@
     "web": "npm run web:build && node bin/marketmind-web.mjs",
     "web:serve": "node bin/marketmind-web.mjs",
     "web:dev": "node bin/marketmind-web-dev.mjs",
+    "web:demo": "npm run web:build && node bin/marketmind-web-demo.mjs",
     "web:build": "vite build --config web/vite.config.ts",
     "web:typecheck": "tsc -p web",
     "e2e": "npm run web:build && node test-e2e/run.mjs",

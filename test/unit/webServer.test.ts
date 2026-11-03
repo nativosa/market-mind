@@ -57,7 +57,7 @@ describe("GET /api/status", () => {
       budget: { process: { limit: 100, used: 0, remaining: 100 }, window: { limit: 60, windowMs: 300_000, used: 0, remaining: 60 } },
       rateLimit: { coolingDown: false, retryAfterMs: 0 },
       live: { enabled: true },
-      stored: { defaultSource: "live", database: "missing" },
+      stored: { mode: "normal", defaultSource: "live", database: "missing" },
     });
     expect(r.headers).toMatchObject({
       "content-type": "application/json; charset=utf-8",

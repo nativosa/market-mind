@@ -1,0 +1,30 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-5);
+  min-width: 0;
+}
+
+.checking {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.text {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: var(--space-3) var(--space-4);
+  }
+}

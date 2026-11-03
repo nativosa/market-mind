@@ -28,6 +28,8 @@ export interface HistoryStore {
   showMoreRuns(): void;
   /** Start from the first stored-markets page and the default runs count, e.g. before the source filter changes. */
   resetPaging(): void;
+  /** Read /api/status once (live allowed, demo mode, default source); again only after a failure. */
+  loadStatus(): void;
   /** Mount and unmount. Unmounting aborts everything, unless the component mounts again at once (StrictMode). */
   attach(): void;
   detach(): void;
@@ -132,7 +134,7 @@ export function createHistoryStore(api: ApiClient, options: StoreOptions = {}): 
     statusController = controller;
     void api.status(controller.signal).then((result) => {
       if (statusController === controller) statusController = null;
-      if (result.ok) dispatch({ type: "status", status: result.data });
+      dispatch(result.ok ? { type: "status", status: result.data } : { type: "status_failed", error: result.error });
     });
   }
 
@@ -163,6 +165,7 @@ export function createHistoryStore(api: ApiClient, options: StoreOptions = {}): 
       dispatch({ type: "runs_limit", limit: state.runsLimit + RUNS_STEP });
       if (route !== null) sync(route);
     },
+    loadStatus,
     resetPaging() {
       dispatch({ type: "offset", offset: 0 });
       dispatch({ type: "runs_limit", limit: RUNS_STEP });

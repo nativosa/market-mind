@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createApiClient, type ApiClient } from "./api";
 import { App, defaultRouteWindow } from "./App";
+import { DemoBanner } from "./components/DemoBanner";
 import type { NavProps } from "./components/Header";
+import { LiveUnavailable } from "./components/LiveUnavailable";
 import { HistoryApp } from "./HistoryApp";
 import { createHistoryStore, type HistoryStore } from "./historyStore";
-import { historyHash, parseRoute, watchAppRoute, type AppRoute, type HistoryRoute, type RouteWindow } from "./route";
+import { historyHash, parseRoute, replaceHash, watchAppRoute, type AppRoute, type HistoryRoute, type RouteWindow } from "./route";
 
 /**
  * Which section the hash shows, and which sections have been opened. A section mounts the first
@@ -54,6 +56,12 @@ export interface RootProps {
   historyStore?: HistoryStore;
 }
 
+/**
+ * The server's status (read once, through the history store, and shared with the Live Explorer)
+ * decides what the Live Explorer section may do: nothing starts there until the server has said
+ * whether live requests are allowed. A server that refuses them (the synthetic demonstration) gets
+ * an explanation instead of the explorer, and its start page is Stored History.
+ */
 export function Root({ api: injected, clock = Date.now, routeWindow = defaultRouteWindow(), initialHash, historyStore }: RootProps) {
   const api = useMemo(() => injected ?? createApiClient(), [injected]);
   const store = useMemo(() => historyStore ?? createHistoryStore(api, { now: clock }), [historyStore, api, clock]);
@@ -61,17 +69,33 @@ export function Root({ api: injected, clock = Date.now, routeWindow = defaultRou
     const hash = routeWindow?.location.hash ?? initialHash ?? "";
     return rootStateFor(parseRoute(hash), hash);
   });
+  const history = useSyncExternalStore(store.subscribe, store.getState, store.getState);
+  const { status, statusError } = history;
 
   useEffect(() => (routeWindow ? watchAppRoute(routeWindow, (route, hash) => setState((previous) => rootStateFor(route, hash, previous))) : undefined), [routeWindow]);
+  useEffect(() => store.loadStatus(), [store]);
 
-  const liveEnabled = useLiveEnabled(store);
-  const nav = navFor(state, liveEnabled);
+  const liveEnabled = status?.live.enabled ?? true;
   const live = state.route.section === "live";
+  const startPage = state.route.section === "live" && state.route.marketId === null;
+  useEffect(() => {
+    if (routeWindow && !liveEnabled && startPage) replaceHash(routeWindow, historyHash(HISTORY_HOME));
+  }, [routeWindow, liveEnabled, startPage]);
+
+  const nav = navFor(state, liveEnabled);
+  const connection = status !== null ? "connected" : statusError !== null ? "unreachable" : "checking";
   return (
     <>
+      {status?.stored.mode === "demo" && <DemoBanner />}
       {state.liveOpened && (
         <div hidden={!live}>
-          <App api={api} clock={clock} routeWindow={routeWindow} nav={nav} />
+          {status === null && statusError === null ? (
+            <LiveUnavailable nav={nav} reason="checking" connection={connection} />
+          ) : !liveEnabled ? (
+            <LiveUnavailable nav={nav} reason="disabled" connection={connection} />
+          ) : (
+            <App api={api} clock={clock} routeWindow={routeWindow} nav={nav} status={status} />
+          )}
         </div>
       )}
       {state.historyOpened && (
@@ -81,15 +105,4 @@ export function Root({ api: injected, clock = Date.now, routeWindow = defaultRou
       )}
     </>
   );
-}
-
-/** Whether the server allows live requests, as the history store learned from /api/status (assumed until known). */
-function useLiveEnabled(store: HistoryStore): boolean {
-  const [enabled, setEnabled] = useState(() => store.getState().status?.live.enabled ?? true);
-  useEffect(() => {
-    const update = () => setEnabled(store.getState().status?.live.enabled ?? true);
-    update();
-    return store.subscribe(update);
-  }, [store]);
-  return enabled;
 }

@@ -124,9 +124,12 @@ describe("sections", () => {
     expect(live).toEqual([]);
   });
 
-  it("renders only the explorer for a live address, with the section links", () => {
+  it("renders only the explorer for a live address once the server allows live requests, with the section links", async () => {
     const { api } = pendingApi();
-    const t = text(html(<Root api={api} clock={() => NOW} routeWindow={null} initialHash="#/" />));
+    const store = createHistoryStore(api);
+    store.loadStatus();
+    await flush();
+    const t = text(html(<Root api={api} clock={() => NOW} routeWindow={null} initialHash="#/" historyStore={store} />));
     expect(t).toContain("Search loaded markets");
     expect(t).toContain("Live Explorer requests Polymarket");
     expect(t).toContain("Stored History offline, local database");
@@ -286,7 +289,7 @@ describe("history store requests", () => {
   it("the source in effect: the route's choice, else what the server applied, else its default", () => {
     expect(effectiveSource({ ...MARKETS, source: "all" }, "live", status)).toBe("all");
     expect(effectiveSource(MARKETS, "all", status)).toBe("all");
-    expect(effectiveSource(MARKETS, null, { ...status, stored: { defaultSource: "all", database: "present" } })).toBe("all");
+    expect(effectiveSource(MARKETS, null, { ...status, stored: { mode: "demo", defaultSource: "all", database: "present" } })).toBe("all");
     expect(effectiveSource(MARKETS, undefined, null)).toBe("live");
   });
 });
