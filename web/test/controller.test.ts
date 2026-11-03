@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ApiClient, ApiResult, Markets, Version } from "../src/api";
 import { createController } from "../src/controller";
 import { initialState, reducer, visibleMarkets, type Action, type ExplorerState } from "../src/explorer";
-import { item, NOW, page, range, status } from "./fixtures";
+import { item, NOW, page, range, status, NO_STORED_READS } from "./fixtures";
 
 // The explorer's request logic against a fake API whose answers the test releases one by one.
 
@@ -17,6 +17,7 @@ function harness(state: ExplorerState = initialState()) {
   const pending: Pending[] = [];
   let statusCalls = 0;
   const api: ApiClient = {
+    ...NO_STORED_READS,
     markets: ({ version, cursor }, signal) =>
       new Promise((resolve) => {
         const entry: Pending = { version, cursor: cursor ?? null, signal: signal!, answer: resolve };

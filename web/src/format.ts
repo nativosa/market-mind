@@ -103,7 +103,23 @@ export function describeApiError(error: ApiError, now: number): ErrorView {
     case "invalid_arguments":
       return { ...base, title: "The request was rejected", detail: "The server considered the request invalid." };
     case "forbidden":
-      return { ...base, title: "The server refused this page's origin", detail: "Open the explorer at the address the MarketMind server prints (or the dev address that npm run web:dev prints)." };
+      return e.code === "LIVE_DISABLED"
+        ? { ...base, title: "Live requests are disabled on this server", detail: "This MarketMind server never contacts Polymarket. Stored History still works." }
+        : { ...base, title: "The server refused this page's origin", detail: "Open the explorer at the address the MarketMind server prints (or the dev address that npm run web:dev prints)." };
+    case "database_missing":
+      return { ...base, title: "No local history database yet", detail: "Stored History reads observations saved by MarketMind's collect command. Run npm run cli -- collect to create them." };
+    case "observation_not_found":
+      return { ...base, title: "This observation is not available", detail: "No stored observation has this ID under the selected source filter. Synthetic observations appear only with Live + synthetic." };
+    case "observation_not_available_as_of":
+      return { ...base, title: "This observation was not available yet", detail: "It became available after the time asked for." };
+    case "storage_error":
+      return e.code === "DATABASE_BUSY"
+        ? { ...base, title: "The local database is busy", detail: "Another process (for example a running collect) is holding it. Try again in a moment." }
+        : e.code === "SCHEMA_OUTDATED"
+          ? { ...base, title: "The local database needs an upgrade", detail: "It was created by an older MarketMind. Running collect once migrates it; this page never changes it." }
+          : e.code === "SCHEMA_TOO_NEW"
+            ? { ...base, title: "The local database is from a newer MarketMind", detail: "This version cannot read it safely. Update MarketMind to view it." }
+            : { ...base, title: "The local database could not be read", detail: "The server reported a storage error. Nothing was changed." };
     case "cancelled":
       return { ...base, title: "The request was cancelled", detail: e.code === "SHUTTING_DOWN" ? "The server is shutting down." : "It was stopped before it finished." };
     default:

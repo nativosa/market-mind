@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ApiClient, ApiError, ApiResult, Inspection, Markets } from "../src/api";
 import { createController, INSPECT_LEVELS } from "../src/controller";
 import { emptyInspection, initialState, newerBudget, reducer, type Action, type ExplorerState } from "../src/explorer";
-import { INSPECT_V1, INSPECT_V2, inspected, inspectionOf, item, NOW, page, serverError, status } from "./fixtures";
+import { INSPECT_V1, INSPECT_V2, inspected, inspectionOf, item, NOW, page, serverError, status, NO_STORED_READS } from "./fixtures";
 
 // The selected market's inspection: one request at a time, superseded requests aborted, stale
 // answers ignored, nothing retried or refreshed on its own.
@@ -32,6 +32,7 @@ function harness(state: ExplorerState = loadedState(), deferred = false) {
   const pending: Pending[] = [];
   let statusCalls = 0;
   const api: ApiClient = {
+    ...NO_STORED_READS,
     markets: () => new Promise<ApiResult<Markets>>(() => undefined),
     status: () => {
       statusCalls++;

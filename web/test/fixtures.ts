@@ -90,11 +90,20 @@ export function serverError(category: string, code: string | null, details: Reco
 /** A JSON Response, as the server would send it. */
 export const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8" } });
 
+/** The explorer never reads stored data: an explorer test double fails loudly if it does. */
+export const NO_STORED_READS: Pick<ApiClient, "storedMarkets" | "storedRuns" | "history" | "observation"> = {
+  storedMarkets: () => Promise.reject(new Error("unexpected stored read")),
+  storedRuns: () => Promise.reject(new Error("unexpected stored read")),
+  history: () => Promise.reject(new Error("unexpected stored read")),
+  observation: () => Promise.reject(new Error("unexpected stored read")),
+};
+
 /** An ApiClient whose markets() and inspect() answers are queued per call; records every query. */
 export function scriptedApi(replies: ApiResult<Markets>[], statusReply: ApiResult<Status> = { ok: true, data: status, receivedAt: NOW }, inspectReplies: ApiResult<Inspection>[] = []) {
   const queries: { version: Version; cursor: string | null }[] = [];
   const inspections: { marketId: string; levels: number | undefined }[] = [];
   const api: ApiClient = {
+    ...NO_STORED_READS,
     status: () => Promise.resolve(statusReply),
     markets: ({ version, cursor }) => {
       queries.push({ version, cursor: cursor ?? null });

@@ -15,6 +15,8 @@ export const SCREENSHOTS = "test-results/e2e-screenshots";
 export interface Limits {
   processLimit?: number;
   windowLimit?: number;
+  /** The database the stored routes read (test-e2e/server.ts). */
+  db?: "missing" | "empty" | "history";
 }
 
 export interface World {

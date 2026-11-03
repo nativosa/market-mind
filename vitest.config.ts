@@ -30,9 +30,9 @@ export default defineConfig({
         "{src/mcp/{liveTools,results,server,storedTools}.ts,src/research/**}": { lines: 90, statements: 90, functions: 90, branches: 85 },
         // Stage 3.1 web API (main.ts runs only in the spawned-launcher test, invisible to V8 coverage).
         "src/web/{routes,security,server,settings,static}.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
-        // Stage 3.1 explorer UI (main.tsx only mounts the app in a browser).
-        "web/src/{api,book,controller,explorer,format,route}.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
-        "web/src/{App,components/*}.tsx": { lines: 85, statements: 85, functions: 80, branches: 75 },
+        // Stage 3.1 explorer UI and Stage 3.2 Stored History (main.tsx only mounts the app in a browser).
+        "web/src/{api,book,controller,explorer,format,route,history,historyStore}.ts": { lines: 90, statements: 90, functions: 90, branches: 85 },
+        "web/src/{App,Root,HistoryApp,components/*}.tsx": { lines: 85, statements: 85, functions: 80, branches: 75 },
       },
     },
   },

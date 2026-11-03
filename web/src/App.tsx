@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { createApiClient, type ApiClient } from "./api";
 import { Controls } from "./components/Controls";
 import { DETAIL_HEADING_ID, DetailPanel } from "./components/DetailPanel";
-import { Header } from "./components/Header";
+import { Header, type NavProps } from "./components/Header";
 import { MarketTable } from "./components/MarketTable";
 import { ErrorNotice, LoadingRows, Notice } from "./components/Notice";
 import { Pager } from "./components/Pager";
@@ -19,9 +19,11 @@ export interface AppProps {
   initial?: ExplorerState;
   /** The window whose hash holds the selected market; null disables routing (tests without a DOM). */
   routeWindow?: RouteWindow | null;
+  /** Section links (Root supplies where each section was left). */
+  nav?: NavProps;
 }
 
-const defaultRouteWindow = (): RouteWindow | null => (typeof window === "undefined" ? null : window);
+export const defaultRouteWindow = (): RouteWindow | null => (typeof window === "undefined" ? null : window);
 
 /** A local clock for ages and countdowns. It re-renders; it never makes requests. */
 function useNow(clock: () => number, intervalMs: number): number {
@@ -33,7 +35,7 @@ function useNow(clock: () => number, intervalMs: number): number {
   return now;
 }
 
-export function App({ api: injected, clock = Date.now, initial, routeWindow = defaultRouteWindow() }: AppProps) {
+export function App({ api: injected, clock = Date.now, initial, routeWindow = defaultRouteWindow(), nav }: AppProps) {
   const api = useMemo(() => injected ?? createApiClient(), [injected]);
   const [state, dispatch] = useReducer(reducer, initial ?? initialState());
   const now = useNow(clock, 1_000);
@@ -75,7 +77,7 @@ export function App({ api: injected, clock = Date.now, initial, routeWindow = de
 
   return (
     <div className={`${styles.app} ${state.selectedId !== null ? styles.selecting : ""}`}>
-      <Header connection={state.connection} budget={state.budget} />
+      <Header connection={state.connection} budget={state.budget} {...(nav ? { nav } : {})} />
       <main className={styles.main}>
         <section className={styles.listColumn} aria-label="Markets">
           <Controls

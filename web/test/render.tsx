@@ -41,8 +41,8 @@ export const button = (tree: ReactNode, label: string) => {
 };
 export const call = (fn: unknown, ...args: unknown[]) => (fn as (...a: unknown[]) => void)(...args);
 
-/** Render App once (hooks need a render) and return the element tree it produced, with its handlers. */
-export function appTree(props: React.ComponentProps<typeof App>, renderApp: typeof App): ReactNode {
+/** Render a component once (hooks need a render) and return the element tree it produced, with its handlers. */
+export function appTree<P = React.ComponentProps<typeof App>>(props: P, renderApp: (props: P) => ReactNode): ReactNode {
   let tree: ReactNode = null;
   function Probe() {
     tree = renderApp(props);

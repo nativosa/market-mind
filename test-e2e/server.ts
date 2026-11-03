@@ -8,13 +8,16 @@ import { createLiveGate, withRateLimitCooldown } from "../src/research/liveGate.
 import { createWebServer, type WebServer } from "../src/web/server.js";
 import { staticRootOf } from "../src/web/static.js";
 import { TEST_HTTP_OPTIONS } from "../test/helpers.js";
+import { seedEmpty, seedHistory } from "../test/historySeed.js";
+import { cleanupTemp } from "../test/storageFixtures.js";
 import { CLOB, createUpstream, GAMMA, type Upstream } from "./upstream.js";
 
 // E2E entry point (test-only; never imported by the application). It runs, all on 127.0.0.1:
 // - the real MarketMind web server serving the production build of web/ over the fixture upstream;
 // - a Vite dev server for the same app (React StrictMode development build), proxying /api to it;
-// - a control port the specs use to reset the server (fresh budgets, cooldown and URL log) and to
-//   read which upstream URLs were requested.
+// - a control port the specs use to reset the server (fresh budgets, cooldown and URL log, and which
+//   local database the stored routes read) and to read which upstream URLs were requested.
+// The stored-history databases are temporary fixtures written through the collect code path.
 
 const WEB_PORT = Number(process.env.E2E_WEB_PORT ?? 4417);
 const CONTROL_PORT = Number(process.env.E2E_CONTROL_PORT ?? 4418);
@@ -28,7 +31,11 @@ if (staticRoot === null) throw new Error("web/dist is missing: run npm run web:b
 export interface Limits {
   processLimit?: number;
   windowLimit?: number;
+  /** The database the stored routes read: none (default), a migrated empty one, or the history fixture. */
+  db?: "missing" | "empty" | "history";
 }
+
+const databases = { missing: "unused-e2e.sqlite", empty: seedEmpty(), history: seedHistory().path };
 
 let upstream: Upstream = createUpstream();
 let web: WebServer | null = null;
@@ -44,7 +51,7 @@ async function start(limits: Limits): Promise<void> {
     gate,
     config,
     liveEnabled: true,
-    stored: { dbPath: config.dbPath, defaultSource: "live" },
+    stored: { dbPath: databases[limits.db ?? "missing"], defaultSource: "live" },
     liveness: realLiveness,
     devOrigins: [DEV_ORIGIN],
     staticRoot,
@@ -90,7 +97,10 @@ let stopping = false;
 const stop = () => {
   if (stopping) return;
   stopping = true;
-  void Promise.allSettled([web?.close(), vite.close(), new Promise((done) => controlServer.close(done))]).then(() => process.exit(0));
+  void Promise.allSettled([web?.close(), vite.close(), new Promise((done) => controlServer.close(done))]).then(() => {
+    cleanupTemp();
+    process.exit(0);
+  });
 };
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
