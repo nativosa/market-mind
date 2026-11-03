@@ -33,6 +33,8 @@ It also includes a bounded runner for repeated real investigations. The offline 
 
 **Stage 3.1** (v0.9.0) adds the **Web Explorer**: a local, read-only browser UI (React + Vite, served by a small Node HTTP server on `127.0.0.1`). Browse open markets, search and filter the loaded pages, and compare the two order books of one market with their quality, freshness and provenance. It never trades, and only the local server talks to Polymarket. See [Web Explorer (Stage 3.1)](#web-explorer-stage-31) and [`docs/web-explorer.md`](docs/web-explorer.md).
 
+**Stage 3.2** adds **Stored History** to the Web Explorer: an offline view of what `collect` stored in your local SQLite database, read-only. It lists stored markets and collection runs, charts each market's sampled bid/ask, spread and depth, and opens the exact stored evidence of any observation. `npm run web:demo` shows it with a synthetic, offline demonstration database. See [Stored History (Stage 3.2)](#stored-history-stage-32).
+
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
 
 **What to keep in mind when reading any output:**
@@ -57,7 +59,7 @@ npm run cli -- history --market-id <gammaId>            # stored history and sam
 npm run verify                                          # typecheck, lint and the offline test suite
 ```
 
-For the browser UI, run `npm run web` and open <http://127.0.0.1:4317>. Opening it makes one bounded live market-list request; see [Web Explorer (Stage 3.1)](#web-explorer-stage-31).
+For the browser UI, run `npm run web` and open <http://127.0.0.1:4317>. Opening it makes one bounded live market-list request; see [Web Explorer (Stage 3.1)](#web-explorer-stage-31). For your stored history, open <http://127.0.0.1:4317/#/history> (no Polymarket request), or try `npm run web:demo` (synthetic data, fully offline).
 
 For an AI investigation, open Claude Code in the repository, approve the `marketmind` MCP server, and type `/investigate-market <gammaId>`. See [Setup with Claude Code](#setup-with-claude-code). It uses your Claude usage.
 
@@ -662,6 +664,23 @@ npm run web:dev    # development: API + Vite dev server with hot reload at http:
 
 Endpoints, security model, cancellation and cooldown behaviour, Windows notes and troubleshooting: [`docs/web-explorer.md`](docs/web-explorer.md).
 
+## Stored History (Stage 3.2)
+
+```bash
+npm run cli -- collect --market-id <gammaId>   # store an observation (repeat later to build a history)
+npm run web                                    # then open http://127.0.0.1:4317/#/history
+npm run web:demo                               # or: an offline synthetic demonstration, nothing collected needed
+```
+
+- **Offline and read-only.** Stored History reads the local database (`MARKETMIND_DB`, default `data/marketmind.sqlite`) read-only and never contacts Polymarket. A history address, deep links included, never starts the Live Explorer. The Live Explorer may make public Polymarket `GET` requests; Stored History and the demo never do.
+- **What it shows.** Stored markets and collection runs; per market, the server's statistics, three SVG charts (bid/ask with midpoint, spread, resting depth) and an accessible observation table; per observation, the exact stored books, quality issues, request timing and every metrics version (at collection or retrospective).
+- **Read it correctly.** Statistics count **observations, not elapsed time**. Charts show **sampled states**, never joined or interpolated, with irregular gaps shaded. The two books of an observation are **separate requests, not an atomic snapshot**. Resting depth is **not executable liquidity**. Values are the exact stored decimal strings.
+- **Limits.** Statistics use the newest 20,000 observations; charts and table show the newest 2,000, and the page says when fewer are plotted than analysed.
+- **Synthetic provenance.** Runs are `live` or `synthetic`. The default filter is **Live only**; **Live + synthetic** includes and labels synthetic data. **Synthetic data is not market evidence.**
+- **`npm run web:demo`** generates a deterministic synthetic database (3 markets, 17 runs) in a new OS temporary folder, never opens your database, refuses every live route, and deletes the folder when you press Ctrl+C. A killed process leaves its `marketmind-demo-*` folder behind; delete it by hand.
+
+Details, API, limits and Windows notes: [`docs/web-explorer.md`](docs/web-explorer.md#stored-history-stage-32).
+
 ## Architecture
 
 ```
@@ -676,10 +695,12 @@ src/
   research/   transport-neutral layer: contracts (Zod schemas), bounded views, error envelopes, live request gate
   mcp/        MCP server (stdio): tool registration and MCP result wrapping over src/research
   web/        local read-only HTTP API (node:http, 127.0.0.1 only) over src/research, plus the built UI's static files
+  demo/       npm run web:demo: deterministic synthetic database generator, temporary directory, offline launcher
 bin/marketmind-mcp.mjs   portable MCP launcher (any working directory, no shell wrapper)
 web/          React + Vite Market Explorer (browser only; imports nothing from src/ but src/research/contracts.ts)
 bin/marketmind-web.mjs       portable web server launcher (Stage 3.1)
 bin/marketmind-web-dev.mjs   development: API server + Vite dev server together, no shell needed
+bin/marketmind-web-demo.mjs  synthetic offline demonstration of Stored History (Stage 3.2)
 test-e2e/     Playwright suite: real server + production build over an offline fixture Polymarket
 ```
 
@@ -760,6 +781,7 @@ Assumptions:
 - **Development-only audit advisories.** `npm audit --omit=dev` reports 0 vulnerabilities. A full `npm audit` reports 11 moderate advisories in development tooling, all from one issue (minimatch GHSA-g3hv-75wg-m249) through ESLint and typescript-eslint. npm's suggested fix is a downgrade to eslint 4.0.0, so they remain until those tools move on.
 - **Scope.** Polymarket access is read-only and on-demand: there is no streaming, scheduling, monitoring or trading. Repeated collection is your explicit decision; there is no background mode.
 - **The Web Explorer is local and single-user.** It searches only the pages it has loaded, keeps nothing between sessions, and its budget figures update only after a request. An aborted inspection may already have used upstream attempts. Its live behaviour against Polymarket is covered by a bounded manual smoke session, not by automated tests; the automated suites run against fixtures.
+- **Stored History has no refresh button or `asOf` control.** Reload the page after another `collect`. Charts show at most the newest 2,000 observations and select by mouse or touch (the table is the keyboard route). See [`docs/web-explorer.md`](docs/web-explorer.md#known-limitations).
 - **The investigator's quality is not validated.** Both policies were evaluated only on synthetic scenarios, with small samples and no independent human review. A report can misread or overstate evidence it cites correctly.
 - **The CLI harnesses print a trust warning.** In each fresh temp project, Claude Code ignores the project-scope allow rules. The same rules are passed with `--settings`, and the tool pool is set by `--tools ""`, so the warning is expected and harmless.
 
