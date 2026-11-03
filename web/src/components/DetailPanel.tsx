@@ -1,8 +1,27 @@
-import type { MarketItem } from "../api";
+import type { Inspection, MarketItem } from "../api";
+import { ASSOCIATION_TEXT, CROSS_CHECK_TEXT, roleText } from "../book";
+import type { InspectionState } from "../explorer";
 import { formatDate, formatFlag, formatVolume, NOT_REPORTED } from "../format";
+import { BookComparison } from "./BookComparison";
+import { ErrorNotice, LoadingRows, Notice } from "./Notice";
+import { Provenance } from "./Provenance";
 import styles from "./DetailPanel.module.css";
 
 const VOLUME_NOTE = "Gamma's reported 24h traded volume orders the list. It is not liquidity or order-book depth.";
+export const DETAIL_HEADING_ID = "market-detail-heading";
+
+export interface DetailPanelProps {
+  /** Listing metadata, when the market is among the loaded ones. */
+  market: MarketItem | null;
+  selectedId: string | null;
+  inspection: InspectionState;
+  depth: number;
+  now: number;
+  onInspect: () => void;
+  onCancel: () => void;
+  onDepth: (depth: number) => void;
+  onClose: () => void;
+}
 
 function Fact({ term, value }: { term: string; value: string }) {
   return (
@@ -13,74 +32,207 @@ function Fact({ term, value }: { term: string; value: string }) {
   );
 }
 
-/** Listing metadata for the selected market. No request is made here: inspection comes in the next step. */
-export function DetailPanel({ market, selectedId, onClose }: { market: MarketItem | null; selectedId: string | null; onClose: () => void }) {
+/**
+ * The selected market: listing metadata at once, then its live inspection. Market text is
+ * third-party data and is rendered as React text only.
+ */
+export function DetailPanel(props: DetailPanelProps) {
+  const { market, selectedId, inspection, onClose } = props;
   if (selectedId === null) {
     return (
       <aside className={styles.panel} aria-label="Market details">
         <p className={styles.heading}>Market details</p>
-        <p className={styles.note}>Select a market to see its listing metadata.</p>
+        <p className={styles.note}>Select a market to see its details and inspect its two order books.</p>
       </aside>
     );
   }
-  if (market === null) {
-    return (
-      <aside className={styles.panel} aria-label="Market details">
-        <p className={styles.heading}>Market {selectedId}</p>
-        <p className={styles.note}>This market is not among the loaded markets any more (the list was refreshed).</p>
-        <button type="button" className={styles.close} onClick={onClose}>
-          Clear selection
-        </button>
-      </aside>
-    );
-  }
-  const m = market;
+  const live = inspection.result?.data.market ?? null;
+  const question = live?.question ?? market?.question ?? `Market ${selectedId}`;
   return (
     <aside className={styles.panel} aria-label="Market details">
-      <p className={styles.heading}>Selected market</p>
-      <h2 className={styles.question}>{m.question}</h2>
-      <dl className={styles.facts}>
-        <Fact term="Gamma ID" value={m.gammaId} />
-        <Fact term="Condition ID" value={m.conditionId} />
-        <Fact term="Slug" value={m.slug} />
-        <Fact term="Protocol" value={m.protocolVersion.toUpperCase()} />
-        <Fact term="Outcomes" value={`${m.outcomeLabels.join(" / ")}${m.outcomeCount > m.outcomeLabels.length ? ` (+${m.outcomeCount - m.outcomeLabels.length} more)` : ""}`} />
-        <Fact term="Active" value={formatFlag(m.active)} />
-        <Fact term="Closed" value={formatFlag(m.closed)} />
-        <Fact term="Accepting orders" value={formatFlag(m.acceptingOrders)} />
-        <Fact term="Order book enabled" value={formatFlag(m.enableOrderBook)} />
-        <Fact term="Neg-risk" value={formatFlag(m.negRisk)} />
-        <Fact term="Ends" value={formatDate(m.endDate)} />
-        <Fact term="Gamma 24h volume" value={formatVolume(m.gammaVolume24hr)} />
-        <Fact term="Inspectable" value={formatFlag(m.eligibility.inspectable)} />
-      </dl>
-      <p className={styles.note}>{VOLUME_NOTE}</p>
-      {m.eligibility.reasons.length > 0 && (
-        <div>
-          <p className={styles.heading}>Why it cannot be inspected</p>
-          <ul className={styles.list}>
-            {m.eligibility.reasons.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {m.eligibility.warnings.length > 0 && (
-        <div>
-          <p className={styles.heading}>Eligibility warnings</p>
-          <ul className={styles.list}>
-            {m.eligibility.warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className={styles.placeholder}>
-        Order books, spreads and quality checks will appear here in the next step. Nothing has been requested from Polymarket for this market yet.
+      <div className={styles.top}>
+        <button type="button" className={styles.back} onClick={onClose}>
+          <span aria-hidden="true">&larr; </span>Back to markets
+        </button>
+        <p className={styles.heading}>Selected market</p>
       </div>
-      <button type="button" className={styles.close} onClick={onClose}>
-        Close details
-      </button>
+      <h2 id={DETAIL_HEADING_ID} className={styles.question} tabIndex={-1}>
+        {question}
+      </h2>
+      <MarketFacts market={market} inspection={inspection.result?.data ?? null} selectedId={selectedId} />
+      {market === null && live === null && <p className={styles.note}>This market is not among the loaded markets, so only an inspection can show its details.</p>}
+      <InspectionSection {...props} />
+      <Disclaimer inspection={inspection.result?.data ?? null} />
     </aside>
+  );
+}
+
+function MarketFacts({ market, inspection, selectedId }: { market: MarketItem | null; inspection: Inspection | null; selectedId: string }) {
+  const live = inspection?.market ?? null;
+  const pick = (fromLive: string | undefined, fromList: string | undefined): string => fromLive ?? fromList ?? NOT_REPORTED;
+  const protocol = live?.protocolVersion ?? market?.protocolVersion ?? null;
+  const outcomes = inspection
+    ? inspection.outcomes.map((o) => `${o.label} (${roleText(o.role)})`).join(" / ")
+    : market
+      ? `${market.outcomeLabels.join(" / ")}${market.outcomeCount > market.outcomeLabels.length ? ` (+${market.outcomeCount - market.outcomeLabels.length} more)` : ""}`
+      : NOT_REPORTED;
+  const warnings = [...new Set([...(market?.eligibility.warnings ?? []), ...(inspection?.eligibilityWarnings ?? [])])];
+  return (
+    <>
+      <dl className={styles.facts}>
+        <Fact term="Gamma ID" value={selectedId} />
+        <Fact term="Condition ID" value={pick(live?.conditionId, market?.conditionId)} />
+        <Fact term="Slug" value={pick(live?.slug, market?.slug)} />
+        <Fact term="Protocol" value={protocol === null ? NOT_REPORTED : protocol.toUpperCase()} />
+        <Fact term="Outcomes" value={outcomes} />
+        <Fact term="Active" value={formatFlag(live ? live.active : (market?.active ?? null))} />
+        <Fact term="Closed" value={formatFlag(live ? live.closed : (market?.closed ?? null))} />
+        <Fact term="Accepting orders" value={formatFlag(live ? live.acceptingOrders : (market?.acceptingOrders ?? null))} />
+        <Fact term="Order book enabled" value={formatFlag(live ? live.enableOrderBook : (market?.enableOrderBook ?? null))} />
+        <Fact term="Neg-risk" value={formatFlag(live ? live.negRisk : (market?.negRisk ?? null))} />
+        <Fact term="Ends" value={formatDate(live ? live.endDate : (market?.endDate ?? null))} />
+        <Fact term="Gamma 24h volume" value={formatVolume(live ? live.gammaVolume24hr : (market?.gammaVolume24hr ?? null))} />
+        {market && <Fact term="Inspectable (listing)" value={formatFlag(market.eligibility.inspectable)} />}
+        {inspection && <Fact term="Outcome pairing" value={`${ASSOCIATION_TEXT[inspection.association.method] ?? inspection.association.method}; ${CROSS_CHECK_TEXT[inspection.association.gammaIndexCrossCheck] ?? inspection.association.gammaIndexCrossCheck}`} />}
+      </dl>
+      <p className={styles.note}>
+        {inspection ? "Metadata from the latest inspection. " : "Metadata from the market list. "}
+        {VOLUME_NOTE}
+      </p>
+      {market && market.eligibility.reasons.length > 0 && <TextList title="Why it cannot be inspected" items={market.eligibility.reasons} />}
+      {warnings.length > 0 && <TextList title="Eligibility warnings" items={warnings} />}
+    </>
+  );
+}
+
+function TextList({ title, items }: { title: string; items: readonly string[] }) {
+  return (
+    <div>
+      <p className={styles.heading}>{title}</p>
+      <ul className={styles.list}>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const COST_NOTE = "An inspection makes 4 requests to Polymarket (the market, its CLOB record and one order book per outcome), at most 8 attempts with retries.";
+
+export function InspectionSection({ market, inspection, depth, now, onInspect, onCancel, onDepth }: DetailPanelProps) {
+  const { result, error, loading } = inspection;
+  if (loading && result === null) {
+    return (
+      <section className={styles.inspection} aria-label="Order-book inspection" aria-busy="true">
+        <LoadingRows label="Inspecting the order books" />
+        <div className={styles.actions}>
+          <span className={styles.note}>Inspecting the order books. {COST_NOTE}</span>
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </section>
+    );
+  }
+  if (result === null) {
+    return (
+      <section className={styles.inspection} aria-label="Order-book inspection">
+        {error === null ? <NotInspected market={market} onInspect={onInspect} /> : <InspectionError error={error} now={now} onInspect={onInspect} />}
+      </section>
+    );
+  }
+  const data = result.data;
+  return (
+    <section className={styles.inspection} aria-label="Order-book inspection" aria-busy={loading}>
+      <div className={styles.actions}>
+        <button type="button" onClick={onInspect} disabled={loading}>
+          {loading ? "Refreshing…" : "Refresh inspection"}
+        </button>
+        {loading && (
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+        <span className={styles.note}>Refreshing sends new requests; nothing refreshes on its own.</span>
+      </div>
+      {error && error.kind !== "aborted" && <ErrorNotice error={error} now={now} context="Refresh failed, the earlier result is shown" onRetry={onInspect} retryLabel="Refresh again" />}
+      {error?.kind === "aborted" && (
+        <Notice title="Refresh cancelled">
+          <p className={styles.note}>The earlier result is still shown.</p>
+        </Notice>
+      )}
+      {data.status === "invalid_book" && (
+        <Notice tone="error" title="At least one order book is invalid">
+          <p className={styles.note}>Metrics of an invalid book are withheld, and nothing comparing the two books should be read from this inspection.</p>
+        </Notice>
+      )}
+      <BookComparison inspection={data} depth={depth} onDepth={onDepth} />
+      <Provenance inspection={data} receivedAt={result.receivedAt} now={now} />
+    </section>
+  );
+}
+
+function NotInspected({ market, onInspect }: { market: MarketItem | null; onInspect: () => void }) {
+  if (market?.eligibility.inspectable === false) {
+    return (
+      <Notice title="Order books were not requested">
+        <p className={styles.note}>The market list marks this market as not inspectable (see the reasons above), so nothing was requested automatically.</p>
+        <button type="button" onClick={onInspect}>
+          Check with Polymarket anyway
+        </button>
+      </Notice>
+    );
+  }
+  return (
+    <Notice title="Not inspected yet">
+      <p className={styles.note}>
+        Nothing has been requested from Polymarket for this market yet. {COST_NOTE}
+      </p>
+      <button type="button" onClick={onInspect}>
+        Inspect order books
+      </button>
+    </Notice>
+  );
+}
+
+function InspectionError({ error, now, onInspect }: { error: NonNullable<InspectionState["error"]>; now: number; onInspect: () => void }) {
+  if (error.kind === "aborted") {
+    return (
+      <Notice title="Inspection cancelled">
+        <p className={styles.note}>The request was stopped and nothing is shown.</p>
+        <button type="button" onClick={onInspect}>
+          Inspect order books
+        </button>
+      </Notice>
+    );
+  }
+  const issues = error.kind === "server" && Array.isArray(error.error.details.issues) ? error.error.details.issues.filter((i): i is string => typeof i === "string") : [];
+  return (
+    <>
+      <ErrorNotice error={error} now={now} context="Inspection failed" onRetry={onInspect} />
+      {issues.length > 0 && <TextList title="Reported reasons" items={issues} />}
+    </>
+  );
+}
+
+function Disclaimer({ inspection }: { inspection: Inspection | null }) {
+  return (
+    <section className={styles.disclaimer} aria-label="Research-only notice">
+      <p>
+        <strong>Research only.</strong> MarketMind cannot place orders and recommends none. A quoted spread is not a profit, displayed sizes are not guaranteed fills, and
+        nothing here predicts what the market will do.
+      </p>
+      {inspection && (
+        <>
+          <p>{inspection.evidenceNote}</p>
+          <ul className={styles.list}>
+            {inspection.limitations.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
   );
 }

@@ -1,8 +1,13 @@
+import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MarketsOutput } from "../../src/research/contracts";
 import { fixture, json } from "../../test/helpers";
+import { V1_ROUTES, V2_ROUTES } from "../../test/routes";
 import { closeAllWeb, get, startWeb } from "../../test/webFixtures";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createApiClient, type FetchLike } from "../src/api";
+import { BookComparison } from "../src/components/BookComparison";
+import { INSPECT_LEVELS } from "../src/controller";
 import { item, NOW, page, response, serverError, status } from "./fixtures";
 
 afterEach(closeAllWeb);
@@ -107,5 +112,53 @@ describe("api client against the real local server (fixture upstream)", () => {
     expect((await client.status()).ok).toBe(true);
     const refused = await client.inspect("abc", {});
     expect(refused).toMatchObject({ ok: false, error: { kind: "server", httpStatus: 400, error: { category: "invalid_arguments" } } });
+  });
+});
+
+describe("inspection through the real local server (fixture upstream)", () => {
+  async function inspectVia(routes: typeof V1_ROUTES, id: string) {
+    const s = await startWeb({ routes });
+    const paths: string[] = [];
+    const viaHttp: FetchLike = async (url) => {
+      paths.push(url);
+      const r = await get(s.port, url);
+      return new Response(r.text, { status: r.status, headers: { "content-type": String(r.headers["content-type"]) } });
+    };
+    const result = await createApiClient(viaHttp, () => NOW).inspect(id, { levels: INSPECT_LEVELS });
+    return { s, paths, result };
+  }
+
+  it("V1: the browser asks only /api; the server's best-first ladder and exact strings reach the screen", async () => {
+    const { s, paths, result } = await inspectVia(V1_ROUTES, "100001");
+    expect(paths).toEqual([`/api/markets/100001/inspect?levels=${INSPECT_LEVELS}`]);
+    expect(s.urls.every((u) => u.startsWith("https://gamma.example/") || u.startsWith("https://clob.example/"))).toBe(true);
+    expect(s.urls).toHaveLength(4);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.appliedLimits.levels).toBe(20);
+    const markup = renderToStaticMarkup(createElement(BookComparison, { inspection: result.data, depth: 20, onDepth: () => {} }));
+    const yes = markup.slice(markup.indexOf(">Yes</h4>"), markup.indexOf("</article>"));
+    const cells = (side: string) => {
+      const start = yes.indexOf(`>${side}<`);
+      return [...yes.slice(start, yes.indexOf("</table>", start)).matchAll(/<td class="mono">([^<]+)<\/td>/g)].map((m) => m[1]);
+    };
+    // Upstream sends bids worst-first and asks worst-first; the server's analytics order them best first.
+    expect(cells("Bids")).toEqual(["0.036", "0.035", "0.02", "0.001"]);
+    expect(cells("Asks")).toEqual(["0.037", "0.04", "0.5", "0.999"]);
+    expect(yes).toContain("10,198,713.84");
+    expect(yes).toContain("250.5");
+  });
+
+  it("V2: team-name outcomes arrive without a Yes/No role", async () => {
+    const { result } = await inspectVia(V2_ROUTES, "200002");
+    expect(result.ok && result.data.outcomes.map((o) => [o.label, o.role, o.metrics?.state])).toEqual([
+      ["Team Alpha", null, "empty"],
+      ["Team Beta", null, "two-sided"],
+    ]);
+  });
+
+  it("an unknown market is a 404 market_not_found", async () => {
+    const { result } = await inspectVia({ "/markets/555": json({ error: "not found" }, 404) }, "555");
+    expect(result).toMatchObject({ ok: false, error: { kind: "server", httpStatus: 404, error: { category: "market_not_found", retryable: false } } });
   });
 });

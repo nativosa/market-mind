@@ -1,0 +1,287 @@
+.comparison {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.depth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.unitNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Two books side by side when each can get 280px, stacked otherwise (no container query needed). */
+.books {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-3);
+}
+
+.book {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.invalidBook {
+  border-color: var(--danger);
+}
+
+.bookHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  margin: 0;
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.chip {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.valid {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: transparent;
+}
+
+.incomplete,
+.suspicious,
+.stateWarn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: transparent;
+}
+
+.invalid {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: transparent;
+}
+
+.issues {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.severity {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.withheld,
+.alert {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.withheld {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+}
+
+.alert {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+}
+
+.quote {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.side {
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.side dt {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.side dd {
+  margin: 0;
+}
+
+.side dd:nth-of-type(1) {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.size {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.facts {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+  font-size: var(--text-sm);
+}
+
+.fact {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: 1px dotted var(--border);
+  padding: 2px 0;
+}
+
+.fact dt {
+  color: var(--text-muted);
+}
+
+.fact dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ladderNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+  gap: var(--space-2);
+}
+
+.sideTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.sideTitle {
+  margin: 0 0 var(--space-1);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.sideTable th {
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 2px var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.sideTable td {
+  padding: 2px var(--space-1);
+  border-bottom: 1px solid var(--surface-2);
+}
+
+.num {
+  text-align: right !important;
+}
+
+.barCell {
+  position: relative;
+}
+
+.bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  right: 0;
+  border-radius: 3px;
+  opacity: 0.22;
+}
+
+.bid .bar {
+  background: var(--ok);
+}
+
+.ask .bar {
+  background: var(--danger);
+}
+
+.sizeText {
+  position: relative;
+}
+
+.emptySide {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-style: italic;
+}

@@ -1,5 +1,6 @@
 import { WEB_LIMITS } from "../../src/research/contracts";
-import type { ApiError, MarketItem, Markets, Status, Version } from "./api";
+import { DEFAULT_DEPTH } from "./book";
+import type { ApiError, Inspection, MarketItem, Markets, Status, Version } from "./api";
 
 // Explorer state as a pure reducer: every network result carries the id of the request that asked for
 // it, and a result whose id is no longer the feed's current one is stale and ignored.
@@ -40,6 +41,20 @@ export interface Filters {
 }
 
 export type SortKey = "volume" | "question";
+
+/**
+ * The selected market's live inspection. Only one exists: selecting another market replaces it
+ * (and aborts its request), and an answer for any other request id is stale and ignored.
+ */
+export interface InspectionState {
+  marketId: string | null;
+  requestId: number;
+  loading: boolean;
+  /** The latest answer for this market; kept while a refresh loads or after a refresh fails. */
+  result: { data: Inspection; receivedAt: number } | null;
+  /** The latest request failed or was cancelled; an earlier result, if any, stays visible. */
+  error: ApiError | null;
+}
 export type Budget = Markets["budget"];
 export type Connection = "checking" | "connected" | "unreachable";
 
@@ -49,6 +64,9 @@ export interface ExplorerState {
   filters: Filters;
   sort: SortKey;
   selectedId: string | null;
+  inspection: InspectionState;
+  /** Price levels shown per side in the ladders (a local choice; no request). */
+  ladderDepth: number;
   /** The latest budget the server reported (status or a listing). */
   budget: { process: Budget["process"]; window: Budget["window"] } | null;
   status: Status | null;
@@ -64,7 +82,11 @@ export type Action =
   | { type: "status_failed"; error: ApiError }
   | { type: "filters"; patch: Partial<Filters> }
   | { type: "sort"; sort: SortKey }
-  | { type: "select"; id: string | null };
+  | { type: "select"; id: string | null }
+  | { type: "depth"; depth: number }
+  | { type: "inspect_request"; id: string; requestId: number }
+  | { type: "inspected"; requestId: number; data: Inspection; receivedAt: number }
+  | { type: "inspect_failed"; requestId: number; error: ApiError };
 
 export const emptyFeed = (): Feed => ({
   markets: [],
@@ -80,6 +102,8 @@ export const emptyFeed = (): Feed => ({
   duplicates: 0,
 });
 
+export const emptyInspection = (marketId: string | null = null): InspectionState => ({ marketId, requestId: 0, loading: false, result: null, error: null });
+
 export const DEFAULT_FILTERS: Filters = { query: "", eligibility: "all", orderBookEnabled: false, acceptingOrders: false };
 
 export function initialState(version: Version = "v1"): ExplorerState {
@@ -89,6 +113,8 @@ export function initialState(version: Version = "v1"): ExplorerState {
     filters: DEFAULT_FILTERS,
     sort: "volume",
     selectedId: null,
+    inspection: emptyInspection(),
+    ladderDepth: DEFAULT_DEPTH,
     budget: null,
     status: null,
     connection: "checking",
@@ -109,6 +135,17 @@ function endOf(page: Markets, pages: number): FeedEnd | null {
 
 const connectionAfter = (error: ApiError, current: Connection): Connection =>
   error.kind === "network" ? "unreachable" : error.kind === "aborted" ? current : "connected";
+
+type ExplorerBudget = NonNullable<ExplorerState["budget"]>;
+
+/**
+ * Budget snapshots arrive out of order (status, listings, inspections). The lifetime count only
+ * grows within a server process, so a snapshot with fewer attempts used is older and is ignored.
+ */
+export function newerBudget(current: ExplorerState["budget"], incoming: { process: ExplorerBudget["process"]; window?: ExplorerBudget["window"] }): ExplorerBudget {
+  if (current !== null && incoming.process.limit === current.process.limit && incoming.process.used < current.process.used) return current;
+  return { process: incoming.process, window: incoming.window === undefined ? (current?.window ?? null) : incoming.window };
+}
 
 function updateFeed(state: ExplorerState, version: Version, feed: Feed): ExplorerState {
   return { ...state, feeds: { ...state.feeds, [version]: feed } };
@@ -151,8 +188,7 @@ export function reducer(state: ExplorerState, action: Action): ExplorerState {
         skipped: (first ? 0 : feed.skipped) + action.page.skipped.totalCount,
         duplicates: (first ? 0 : feed.duplicates) + action.page.markets.items.length - added.length,
       };
-      const { process, window } = action.page.budget;
-      return { ...updateFeed(state, action.version, next), budget: { process, window }, connection: "connected" };
+      return { ...updateFeed(state, action.version, next), budget: newerBudget(state.budget, action.page.budget), connection: "connected" };
     }
     case "failed": {
       const feed = state.feeds[action.version];
@@ -166,7 +202,7 @@ export function reducer(state: ExplorerState, action: Action): ExplorerState {
       return { ...updateFeed(state, action.version, settled), connection: connectionAfter(action.error, state.connection) };
     }
     case "status":
-      return { ...state, status: action.status, budget: state.budget ?? { process: action.status.budget.process, window: action.status.budget.window }, connection: "connected" };
+      return { ...state, status: action.status, budget: newerBudget(state.budget, action.status.budget), connection: "connected" };
     case "status_failed":
       return { ...state, connection: connectionAfter(action.error, state.connection) };
     case "filters":
@@ -174,7 +210,32 @@ export function reducer(state: ExplorerState, action: Action): ExplorerState {
     case "sort":
       return { ...state, sort: action.sort };
     case "select":
-      return { ...state, selectedId: action.id };
+      // A new selection releases the previous market's inspection entirely.
+      return action.id === state.selectedId ? state : { ...state, selectedId: action.id, inspection: emptyInspection(action.id) };
+    case "depth":
+      return { ...state, ladderDepth: action.depth };
+    case "inspect_request":
+      if (action.id !== state.selectedId) return state;
+      return { ...state, inspection: { ...state.inspection, marketId: action.id, requestId: action.requestId, loading: true, error: null } };
+    case "inspected": {
+      const current = state.inspection;
+      if (action.requestId !== current.requestId || !current.loading) return state;
+      if (action.data.market.gammaId !== current.marketId) {
+        const error: ApiError = { kind: "invalid_response", httpStatus: 200, issues: [`market.gammaId: expected ${current.marketId}`] };
+        return { ...state, inspection: { ...current, loading: false, error } };
+      }
+      return {
+        ...state,
+        inspection: { ...current, loading: false, error: null, result: { data: action.data, receivedAt: action.receivedAt } },
+        budget: newerBudget(state.budget, action.data.budget),
+        connection: "connected",
+      };
+    }
+    case "inspect_failed": {
+      const current = state.inspection;
+      if (action.requestId !== current.requestId || !current.loading) return state;
+      return { ...state, inspection: { ...current, loading: false, error: action.error }, connection: connectionAfter(action.error, state.connection) };
+    }
   }
 }
 
@@ -241,12 +302,14 @@ export function scopeText(matches: number, loaded: number, version: Version, fil
   return filtered ? `${matches} ${matches === 1 ? "match" : "matches"} among ${markets}` : `Showing all ${markets}`;
 }
 
-/** The selected market, looked up in every loaded feed (it may belong to the other version). */
-export function selectedMarket(state: ExplorerState): MarketItem | null {
-  if (state.selectedId === null) return null;
+/** A loaded market by id, looked up in every loaded feed (it may belong to the other version). */
+export function marketById(state: ExplorerState, id: string): MarketItem | null {
   for (const version of [state.version, ...VERSIONS.filter((v) => v !== state.version)]) {
-    const found = state.feeds[version].markets.find((m) => m.gammaId === state.selectedId);
+    const found = state.feeds[version].markets.find((m) => m.gammaId === id);
     if (found) return found;
   }
   return null;
 }
+
+/** The selected market, if it is among the loaded ones. */
+export const selectedMarket = (state: ExplorerState): MarketItem | null => (state.selectedId === null ? null : marketById(state, state.selectedId));

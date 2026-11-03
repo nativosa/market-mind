@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createApiClient, type ApiClient } from "./api";
 import { Controls } from "./components/Controls";
-import { DetailPanel } from "./components/DetailPanel";
+import { DETAIL_HEADING_ID, DetailPanel } from "./components/DetailPanel";
 import { Header } from "./components/Header";
 import { MarketTable } from "./components/MarketTable";
 import { ErrorNotice, LoadingRows, Notice } from "./components/Notice";
@@ -9,6 +9,7 @@ import { Pager } from "./components/Pager";
 import { createController } from "./controller";
 import { DEFAULT_FILTERS, filtersActive, initialState, reducer, scopeText, selectedMarket, visibleMarkets, type ExplorerState } from "./explorer";
 import { formatAge, isStale } from "./format";
+import { focusSoon, marketButtonId, navigate, watchRoute, type RouteWindow } from "./route";
 import styles from "./App.module.css";
 
 export interface AppProps {
@@ -16,7 +17,11 @@ export interface AppProps {
   api?: ApiClient;
   clock?: () => number;
   initial?: ExplorerState;
+  /** The window whose hash holds the selected market; null disables routing (tests without a DOM). */
+  routeWindow?: RouteWindow | null;
 }
+
+const defaultRouteWindow = (): RouteWindow | null => (typeof window === "undefined" ? null : window);
 
 /** A local clock for ages and countdowns. It re-renders; it never makes requests. */
 function useNow(clock: () => number, intervalMs: number): number {
@@ -28,7 +33,7 @@ function useNow(clock: () => number, intervalMs: number): number {
   return now;
 }
 
-export function App({ api: injected, clock = Date.now, initial }: AppProps) {
+export function App({ api: injected, clock = Date.now, initial, routeWindow = defaultRouteWindow() }: AppProps) {
   const api = useMemo(() => injected ?? createApiClient(), [injected]);
   const [state, dispatch] = useReducer(reducer, initial ?? initialState());
   const now = useNow(clock, 1_000);
@@ -41,6 +46,9 @@ export function App({ api: injected, clock = Date.now, initial }: AppProps) {
     return () => controller.dispose();
   }, [controller]);
 
+  // The hash route selects (or deselects) a market but never inspects it: back/forward cost nothing.
+  useEffect(() => (routeWindow ? watchRoute(routeWindow, (id) => controller.select(id, { inspect: false })) : undefined), [controller, routeWindow]);
+
   // The shown version's first page loads once (again only after an abort); a failure waits for an explicit retry.
   const feed = state.feeds[state.version];
   useEffect(() => controller.ensureFirstPage(), [controller, feed]);
@@ -48,7 +56,21 @@ export function App({ api: injected, clock = Date.now, initial }: AppProps) {
   const visible = useMemo(() => visibleMarkets(state), [state]);
   const filtered = filtersActive(state.filters);
   const selected = selectedMarket(state);
-  const onSelect = useCallback((id: string) => dispatch({ type: "select", id }), []);
+  // A click or Enter on a market selects and inspects it, from the handler itself (not an effect).
+  const onSelect = useCallback(
+    (id: string) => {
+      controller.select(id);
+      if (routeWindow) navigate(routeWindow, id);
+      focusSoon(DETAIL_HEADING_ID);
+    },
+    [controller, routeWindow],
+  );
+  const onClose = () => {
+    const previous = state.selectedId;
+    controller.select(null);
+    if (routeWindow) navigate(routeWindow, null);
+    if (previous !== null) focusSoon(marketButtonId(previous));
+  };
   const stale = isStale(feed.fetchedAt, now);
 
   return (
@@ -92,7 +114,17 @@ export function App({ api: injected, clock = Date.now, initial }: AppProps) {
           {feed.pages > 0 && <Pager feed={feed} onLoadMore={() => controller.load(state.version, "more")} />}
         </section>
         <div className={styles.detailColumn}>
-          <DetailPanel market={selected} selectedId={state.selectedId} onClose={() => dispatch({ type: "select", id: null })} />
+          <DetailPanel
+            market={selected}
+            selectedId={state.selectedId}
+            inspection={state.inspection}
+            depth={state.ladderDepth}
+            now={now}
+            onInspect={() => controller.inspect()}
+            onCancel={() => controller.cancelInspection()}
+            onDepth={(depth) => dispatch({ type: "depth", depth })}
+            onClose={onClose}
+          />
         </div>
       </main>
       <footer className={styles.footer}>

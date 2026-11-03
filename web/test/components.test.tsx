@@ -1,5 +1,3 @@
-import { isValidElement, type ReactElement, type ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ApiError } from "../src/api";
 import { App, ListBody } from "../src/App";
@@ -9,13 +7,17 @@ import { Header } from "../src/components/Header";
 import { MarketTable } from "../src/components/MarketTable";
 import { ErrorNotice } from "../src/components/Notice";
 import { END_TEXT, Pager } from "../src/components/Pager";
-import { DEFAULT_FILTERS, initialState, reducer, visibleMarkets, type Action, type ExplorerState } from "../src/explorer";
+import { DEFAULT_FILTERS, emptyInspection, initialState, reducer, visibleMarkets, type Action, type ExplorerState } from "../src/explorer";
 import { item, NOW, page, range, scriptedApi, serverError } from "./fixtures";
+import { button, call, expand, findAll, html, appTree as renderTree, text } from "./render";
+
+const appTree = (props: React.ComponentProps<typeof App>) => renderTree(props, App);
+const detail = (props: Partial<React.ComponentProps<typeof DetailPanel>>) => (
+  <DetailPanel market={null} selectedId={null} inspection={emptyInspection()} depth={5} now={NOW} onInspect={() => {}} onCancel={() => {}} onDepth={() => {}} onClose={() => {}} {...props} />
+);
 
 // Components render to static HTML (no DOM needed): what a user would see for each state.
 
-const html = (node: React.ReactElement) => renderToStaticMarkup(node);
-const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 const run = (actions: Action[], state: ExplorerState = initialState()) => actions.reduce(reducer, state);
 const loaded = (p = page(range(1, 3)), version: "v1" | "v2" = "v1") =>
   run([{ type: "version", version }, { type: "request", version, mode: "first", requestId: 1 }, { type: "loaded", version, requestId: 1, page: p, receivedAt: NOW }]);
@@ -140,16 +142,17 @@ describe("header, controls and detail panel", () => {
     for (const label of ["Order book enabled", "Accepting orders", "Inspectable only", "Question (A to Z)"]) expect(text(markup)).toContain(label);
   });
 
-  it("shows selected-market metadata and a placeholder, without any inspection data", () => {
+  it("shows selected-market metadata at once, before any inspection data", () => {
     const m = item("42", { question: "Selected?", negRisk: null, eligibility: { inspectable: true, reasons: [], warnings: ["LOW_VOLUME"] } });
-    const t = text(html(<DetailPanel market={m} selectedId="42" onClose={() => {}} />));
+    const t = text(html(detail({ market: m, selectedId: "42", inspection: emptyInspection("42") })));
     expect(t).toContain("Selected?");
     expect(t).toContain("Neg-risk Not reported");
     expect(t).toContain("LOW_VOLUME");
     expect(t).toContain("Nothing has been requested from Polymarket for this market yet");
-    expect(t).not.toMatch(/spread:|best bid/i);
-    expect(text(html(<DetailPanel market={null} selectedId={null} onClose={() => {}} />))).toContain("Select a market");
-    expect(text(html(<DetailPanel market={null} selectedId="42" onClose={() => {}} />))).toContain("not among the loaded markets");
+    expect(t).not.toContain("Best bid");
+    expect(t).not.toContain("Levels per side");
+    expect(text(html(detail({})))).toContain("Select a market");
+    expect(text(html(detail({ selectedId: "42" })))).toContain("not among the loaded markets");
   });
 
   it("renders a loaded app with scope text, freshness and the detail panel", () => {
@@ -162,51 +165,6 @@ describe("header, controls and detail panel", () => {
     expect(t).toContain("cannot place trades");
   });
 });
-
-// ---- interactions: call the handlers the rendered elements carry (no DOM needed) ----
-
-type Props = Record<string, unknown> & { children?: ReactNode };
-
-/** Render function components (hook-free ones) down to host elements, keeping their props. */
-function expand(node: ReactNode): ReactNode {
-  if (Array.isArray(node)) return node.map(expand);
-  if (!isValidElement(node)) return node;
-  const element = node as ReactElement<Props>;
-  const type = element.type as unknown;
-  if (typeof type === "function") return expand((type as (p: Props) => ReactNode)(element.props));
-  if (typeof type === "object" && type !== null && "type" in type) return expand((type as { type: (p: Props) => ReactNode }).type(element.props));
-  return { ...element, props: { ...element.props, children: expand(element.props.children) } };
-}
-
-function findAll(node: ReactNode, match: (e: ReactElement<Props>) => boolean, out: ReactElement<Props>[] = []): ReactElement<Props>[] {
-  if (Array.isArray(node)) node.forEach((n: ReactNode) => findAll(n, match, out));
-  else if (isValidElement(node)) {
-    const element = node as ReactElement<Props>;
-    if (match(element)) out.push(element);
-    findAll(element.props.children, match, out);
-  }
-  return out;
-}
-
-const textOf = (node: ReactNode): string =>
-  Array.isArray(node) ? node.map(textOf).join("") : isValidElement(node) ? textOf((node as ReactElement<Props>).props.children) : node === null || node === undefined || typeof node === "boolean" ? "" : String(node as string);
-const button = (tree: ReactNode, label: string) => {
-  const found = findAll(tree, (e) => e.type === "button" && textOf(e.props.children).includes(label));
-  expect(found, label).toHaveLength(1);
-  return found[0]!.props as { onClick: () => void; disabled?: boolean };
-};
-const call = (fn: unknown, ...args: unknown[]) => (fn as (...a: unknown[]) => void)(...args);
-
-/** Render App once (hooks need a render) and return the element tree it produced, with its handlers. */
-function appTree(props: React.ComponentProps<typeof App>): ReactNode {
-  let tree: ReactNode = null;
-  function Probe() {
-    tree = App(props);
-    return tree as ReactElement;
-  }
-  renderToStaticMarkup(<Probe />);
-  return expand(tree);
-}
 
 describe("interactions", () => {
   it("controls report search, version, eligibility, toggles and sort changes", () => {
@@ -243,9 +201,8 @@ describe("interactions", () => {
     call(button(expand(<ErrorNotice error={{ kind: "network" }} now={NOW} onRetry={() => events.push("retry")} />), "Try again").onClick);
     const s = run([{ type: "filters", patch: { query: "zzz" } }], loaded());
     call(button(expand(<ListBody state={s} visible={[]} now={NOW} onRetry={() => {}} onSelect={() => {}} onClear={() => events.push("clear")} />), "Clear search").onClick);
-    call(button(expand(<DetailPanel market={item("5")} selectedId="5" onClose={() => events.push("close")} />), "Close details").onClick);
-    call(button(expand(<DetailPanel market={null} selectedId="5" onClose={() => events.push("clear selection")} />), "Clear selection").onClick);
-    expect(events).toEqual(["select 5", "more", "retry", "clear", "close", "clear selection"]);
+    call(button(expand(detail({ market: item("5"), selectedId: "5", onClose: () => events.push("close") })), "Back to markets").onClick);
+    expect(events).toEqual(["select 5", "more", "retry", "clear", "close"]);
   });
 
   it("app buttons trigger only explicit requests: refresh, retry, load more and a version switch", () => {
@@ -267,7 +224,7 @@ describe("interactions", () => {
     call(findAll(tree, (e) => e.type === "input" && e.props.type === "search")[0]!.props.onChange, { target: { value: "x" } });
     call(findAll(tree, (e) => e.type === "select")[1]!.props.onChange, { target: { value: "question" } });
     call(button(tree, "Synthetic market 1?").onClick);
-    call(button(tree, "Close details").onClick);
+    call(button(tree, "Back to markets").onClick);
     expect(queries).toHaveLength(before);
   });
 

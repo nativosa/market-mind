@@ -96,6 +96,10 @@ export function describeApiError(error: ApiError, now: number): ErrorView {
       return { ...base, title: "Polymarket returned unusable data", detail: "The response failed validation, so it is not shown." };
     case "deadline_exceeded":
       return { ...base, title: "The request took too long", detail: "It exceeded the server's deadline and was stopped." };
+    case "market_not_found":
+      return { ...base, title: "Polymarket has no market with this ID", detail: "Gamma did not find it. It may have been removed; refresh the market list." };
+    case "market_ineligible":
+      return { ...base, title: "This market cannot be inspected", detail: "It is not a binary market with an enabled order book, so no order books were requested." };
     case "invalid_arguments":
       return { ...base, title: "The request was rejected", detail: "The server considered the request invalid." };
     case "forbidden":

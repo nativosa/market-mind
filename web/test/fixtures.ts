@@ -1,5 +1,6 @@
-import { MarketsOutput, WebErrorOutput, WebStatusOutput } from "../../src/research/contracts";
-import type { ApiClient, ApiResult, MarketItem, Markets, Status, Version } from "../src/api";
+import { readFileSync } from "node:fs";
+import { InspectOutput, MarketsOutput, WebErrorOutput, WebStatusOutput } from "../../src/research/contracts";
+import type { ApiClient, ApiResult, Inspection, MarketItem, Markets, Status, Version } from "../src/api";
 
 // Fixture-backed API responses for the explorer tests. Every page is parsed with the server's own
 // MarketsOutput contract, so a fixture can never drift from what the API may send.
@@ -87,9 +88,10 @@ export function serverError(category: string, code: string | null, details: Reco
 /** A JSON Response, as the server would send it. */
 export const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8" } });
 
-/** An ApiClient whose markets() answers are queued per call; records every query. */
-export function scriptedApi(replies: ApiResult<Markets>[], statusReply: ApiResult<Status> = { ok: true, data: status, receivedAt: NOW }) {
+/** An ApiClient whose markets() and inspect() answers are queued per call; records every query. */
+export function scriptedApi(replies: ApiResult<Markets>[], statusReply: ApiResult<Status> = { ok: true, data: status, receivedAt: NOW }, inspectReplies: ApiResult<Inspection>[] = []) {
   const queries: { version: Version; cursor: string | null }[] = [];
+  const inspections: { marketId: string; levels: number | undefined }[] = [];
   const api: ApiClient = {
     status: () => Promise.resolve(statusReply),
     markets: ({ version, cursor }) => {
@@ -97,7 +99,49 @@ export function scriptedApi(replies: ApiResult<Markets>[], statusReply: ApiResul
       const next = replies.shift();
       return next ? Promise.resolve(next) : new Promise(() => undefined);
     },
-    inspect: () => Promise.reject(new Error("inspect is not used by the explorer list")),
+    inspect: (marketId, { levels }) => {
+      inspections.push({ marketId, levels });
+      const next = inspectReplies.shift();
+      return next ? Promise.resolve(next) : new Promise(() => undefined);
+    },
   };
-  return { api, queries };
+  return { api, queries, inspections };
 }
+
+// ---- inspections: the MCP golden results (the same contract the web route returns) ----
+
+const golden = (name: string): Inspection =>
+  InspectOutput.parse((JSON.parse(readFileSync(new URL(`../../test/fixtures/mcp-golden/${name}.json`, import.meta.url), "utf8")) as { structuredContent: unknown }).structuredContent);
+
+/** V1 Yes/No market 100001: two valid two-sided books. */
+export const INSPECT_V1 = golden("inspect-v1");
+/** V2 market 200002 with team-name outcomes (no Yes/No role): one empty book, one two-sided. */
+export const INSPECT_V2 = golden("inspect-v2");
+/** V1 market whose No book is invalid (metrics withheld). */
+export const INSPECT_INVALID = golden("inspect-invalid-book");
+
+type Outcome = Inspection["outcomes"][number];
+
+/** A copy of `base` with one outcome changed, re-validated against the contract. */
+export function withOutcome(base: Inspection, index: number, patch: (o: Outcome) => Outcome, top: Partial<Inspection> = {}): Inspection {
+  return InspectOutput.parse({ ...base, ...top, outcomes: base.outcomes.map((o, i) => (i === index ? patch(o) : o)) });
+}
+
+/** The inspection of market `id` (the golden V1 result relabelled). */
+export const inspectionOf = (id: string, base: Inspection = INSPECT_V1): Inspection => InspectOutput.parse({ ...base, market: { ...base.market, gammaId: id } });
+
+/** `count` levels per side, best first: bids falling and asks rising from the given cents. */
+export function deepLevels(count: number, bidFrom = 50, askFrom = 51): Outcome["levels"] {
+  const level = (cents: number, i: number) => ({ price: `0.${String(cents).padStart(2, "0")}`, size: `${(i + 1) * 100}.5` });
+  return {
+    order: "aggregated_best_first",
+    bids: Array.from({ length: count }, (_, i) => level(bidFrom - i, i)),
+    asks: Array.from({ length: count }, (_, i) => level(askFrom + i, i)),
+    totalBids: count + 3,
+    totalAsks: count + 3,
+    returnedPerSide: count,
+    truncated: true,
+  };
+}
+
+export const inspected = (data: Inspection, receivedAt = NOW): ApiResult<Inspection> => ({ ok: true, data, receivedAt });

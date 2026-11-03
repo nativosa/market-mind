@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { MarketItem } from "../api";
 import { formatDate, formatFlag, formatVolume, NOT_REPORTED } from "../format";
+import { marketButtonId } from "../route";
 import styles from "./MarketTable.module.css";
 
 export interface MarketTableProps {
@@ -43,7 +44,7 @@ function MarketRow({ market: m, selected, onSelect }: { market: MarketItem; sele
   return (
     <tr className={`${styles.row} ${selected ? styles.selected : ""}`} aria-selected={selected}>
       <td>
-        <button type="button" className={styles.question} aria-pressed={selected} onClick={() => onSelect(m.gammaId)}>
+        <button type="button" id={marketButtonId(m.gammaId)} className={styles.question} aria-pressed={selected} onClick={() => onSelect(m.gammaId)}>
           {m.question}
         </button>
         <span className={styles.slug}>{m.slug}</span>

@@ -16,6 +16,11 @@
   align-items: start;
 }
 
+/* With a market selected the details need room for two order books side by side. */
+.selecting .main {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+}
+
 .listColumn {
   display: flex;
   flex-direction: column;
@@ -26,6 +31,9 @@
 .detailColumn {
   position: sticky;
   top: var(--space-4);
+  min-width: 0;
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow-y: auto;
 }
 
 .bar {
@@ -77,12 +85,19 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .detailColumn {
-    position: static;
+  .selecting .main {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .selecting .detailColumn {
-    order: -1;
+  .detailColumn {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* Tablet and phone: the details replace the list (kept mounted, so its state survives) until Back. */
+  .selecting .listColumn {
+    display: none;
   }
 }
 

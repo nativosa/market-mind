@@ -130,12 +130,9 @@
     box-shadow: none;
   }
 
+  /* Cards label each value themselves (data-label); a clipped header row would still widen the page. */
   .table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
+    display: none;
   }
 
   .table,
