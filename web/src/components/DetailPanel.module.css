@@ -42,6 +42,11 @@
   overflow-wrap: anywhere;
 }
 
+.source {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 .unknown {
   color: var(--text-muted);
   font-style: italic;

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ApiError, Inspection } from "../src/api";
 import { App } from "../src/App";
+import { humanNote } from "../src/book";
 import { BookComparison } from "../src/components/BookComparison";
 import { DetailPanel } from "../src/components/DetailPanel";
 import { emptyInspection, initialState, reducer, type Action, type ExplorerState, type InspectionState } from "../src/explorer";
@@ -294,8 +295,23 @@ describe("refresh, freshness and provenance", () => {
     expect(t).toContain("Outcome pairing Tokens paired from Polymarket's CLOB market record; Gamma's outcome order agrees");
     expect(t).toContain("Metadata from the latest inspection");
     expect(t).toContain("Research only. MarketMind cannot place orders and recommends none.");
-    expect(t).toContain(INSPECT_V1.evidenceNote);
-    for (const limitation of INSPECT_V1.limitations) expect(t).toContain(limitation);
+    // The server's agent-oriented notes are shown in plain wording; the MCP text itself is unchanged.
+    expect(t).toContain("This is a live observation and is not saved.");
+    expect(t).toContain("Market questions and outcome labels come from Polymarket.");
+    expect(t).not.toContain("untrustedTextFields");
+    expect(t).not.toContain("npm run cli");
+    for (const limitation of INSPECT_V1.limitations) expect(t).toContain(humanNote(limitation));
+  });
+
+  it("keeps listing metadata the inspection does not report, and says where it came from", () => {
+    expect(INSPECT_V1.market.gammaVolume24hr).toBeNull();
+    const t = view(done({ ...INSPECT_V1, market: { ...INSPECT_V1.market, negRisk: null } }), { market: item("100001", { gammaVolume24hr: "1000", negRisk: false }) });
+    expect(t).toContain("Gamma 24h volume 1,000 (from the market list)");
+    expect(t).toContain("Neg-risk No (from the market list)");
+    expect(t).toContain("Ends 2027-01-01"); // reported by the inspection: no marker
+    expect(t).not.toContain("Ends 2027-01-01 (from");
+    const unknownBoth = view(done(INSPECT_V1), { market: item("100001", { gammaVolume24hr: null }) });
+    expect(unknownBoth).toContain("Gamma 24h volume Not reported");
   });
 
   it("renders untrusted labels and questions as text", () => {

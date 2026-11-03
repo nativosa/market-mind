@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { PAIR_SKEW_WARNING_MS as ANALYTICS_SKEW_MS } from "../../src/analytics/scanMetrics";
-import { barPercent, barScale, depthChoices, formatMs, formatShares, formatTimestamp, issueText, ladderNote, ladderOf, orUnknown, PAIR_SKEW_WARNING_MS, roleText } from "../src/book";
+import { DATA_NOTICE } from "../../src/research/envelope";
+import { LIVE_EVIDENCE_NOTE } from "../../src/research/views";
+import { barPercent, barScale, depthChoices, HUMAN_NOTES, humanNote, formatMs, formatShares, formatTimestamp, issueText, ladderNote, ladderOf, orUnknown, PAIR_SKEW_WARNING_MS, roleText } from "../src/book";
 import { focusSoon, hashFor, marketButtonId, marketIdFromHash, navigate, watchRoute, type RouteWindow } from "../src/route";
 import { deepLevels, INSPECT_V1, withOutcome } from "./fixtures";
 
@@ -51,6 +53,11 @@ describe("book display helpers", () => {
     expect(formatTimestamp("yesterday")).toBe("yesterday");
     expect(formatTimestamp(null)).toBe("Not reported");
     expect(formatMs(12_345)).toBe("12,345 ms");
+  });
+
+  it("has plain wording for every note the live inspection sends, and passes unknown text through", () => {
+    for (const note of [DATA_NOTICE, LIVE_EVIDENCE_NOTE, ...INSPECT_V1.limitations, INSPECT_V1.evidenceNote]) expect(HUMAN_NOTES[note], note).toBeDefined();
+    expect(humanNote("Something new from the server.")).toBe("Something new from the server.");
   });
 
   it("uses the same pair-skew threshold as the analytics", () => {

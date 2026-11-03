@@ -28,6 +28,10 @@ data/
 # Live investigation artifacts (raw traces contain local paths and session ids; never commit)
 .live-out/
 
+# Playwright E2E output: screenshots, traces and reports are local artifacts, never committed
+test-results/
+playwright-report/
+
 # Logs
 *.log
 npm-debug.log*

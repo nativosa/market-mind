@@ -26,7 +26,7 @@ const MCP_LAYER = { group: ["**/mcp/**"], message: "Only the MCP entry points ma
 const restrict = (paths, patterns) => ({ "no-restricted-imports": ["error", { paths, patterns }] });
 
 export default tseslint.config(
-  { ignores: ["node_modules/", "coverage/", "dist/", "web/dist/"] },
+  { ignores: ["node_modules/", "coverage/", "dist/", "web/dist/", "test-results/", "playwright-report/"] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {

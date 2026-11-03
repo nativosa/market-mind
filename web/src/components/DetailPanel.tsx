@@ -1,5 +1,5 @@
 import type { Inspection, MarketItem } from "../api";
-import { ASSOCIATION_TEXT, CROSS_CHECK_TEXT, roleText } from "../book";
+import { ASSOCIATION_TEXT, CROSS_CHECK_TEXT, humanNote, roleText } from "../book";
 import type { InspectionState } from "../explorer";
 import { formatDate, formatFlag, formatVolume, NOT_REPORTED } from "../format";
 import { BookComparison } from "./BookComparison";
@@ -23,13 +23,26 @@ export interface DetailPanelProps {
   onClose: () => void;
 }
 
-function Fact({ term, value }: { term: string; value: string }) {
+function Fact({ term, value, fromList = false }: { term: string; value: string; fromList?: boolean }) {
   return (
     <>
       <dt>{term}</dt>
-      <dd className={value === NOT_REPORTED ? styles.unknown : undefined}>{value}</dd>
+      <dd className={value === NOT_REPORTED ? styles.unknown : undefined}>
+        {value}
+        {fromList && <span className={styles.source}> (from the market list)</span>}
+      </dd>
     </>
   );
+}
+
+/**
+ * A field the inspection may not report: its value when reported; otherwise the listing's value,
+ * marked as such, rather than erasing what the list already showed.
+ */
+function known<T>(fromLive: T | null | undefined, fromList: T | null | undefined, format: (value: T | null) => string): { value: string; fromList: boolean } {
+  if (fromLive !== undefined && fromLive !== null) return { value: format(fromLive), fromList: false };
+  if (fromLive === null && fromList !== undefined && fromList !== null) return { value: format(fromList), fromList: true };
+  return { value: format(fromLive ?? fromList ?? null), fromList: false };
 }
 
 /**
@@ -87,11 +100,11 @@ function MarketFacts({ market, inspection, selectedId }: { market: MarketItem | 
         <Fact term="Outcomes" value={outcomes} />
         <Fact term="Active" value={formatFlag(live ? live.active : (market?.active ?? null))} />
         <Fact term="Closed" value={formatFlag(live ? live.closed : (market?.closed ?? null))} />
-        <Fact term="Accepting orders" value={formatFlag(live ? live.acceptingOrders : (market?.acceptingOrders ?? null))} />
-        <Fact term="Order book enabled" value={formatFlag(live ? live.enableOrderBook : (market?.enableOrderBook ?? null))} />
-        <Fact term="Neg-risk" value={formatFlag(live ? live.negRisk : (market?.negRisk ?? null))} />
-        <Fact term="Ends" value={formatDate(live ? live.endDate : (market?.endDate ?? null))} />
-        <Fact term="Gamma 24h volume" value={formatVolume(live ? live.gammaVolume24hr : (market?.gammaVolume24hr ?? null))} />
+        <Fact term="Accepting orders" {...known(live?.acceptingOrders, market?.acceptingOrders, formatFlag)} />
+        <Fact term="Order book enabled" {...known(live?.enableOrderBook, market?.enableOrderBook, formatFlag)} />
+        <Fact term="Neg-risk" {...known(live?.negRisk, market?.negRisk, formatFlag)} />
+        <Fact term="Ends" {...known(live?.endDate, market?.endDate, formatDate)} />
+        <Fact term="Gamma 24h volume" {...known(live?.gammaVolume24hr, market?.gammaVolume24hr, formatVolume)} />
         {market && <Fact term="Inspectable (listing)" value={formatFlag(market.eligibility.inspectable)} />}
         {inspection && <Fact term="Outcome pairing" value={`${ASSOCIATION_TEXT[inspection.association.method] ?? inspection.association.method}; ${CROSS_CHECK_TEXT[inspection.association.gammaIndexCrossCheck] ?? inspection.association.gammaIndexCrossCheck}`} />}
       </dl>
@@ -225,10 +238,10 @@ function Disclaimer({ inspection }: { inspection: Inspection | null }) {
       </p>
       {inspection && (
         <>
-          <p>{inspection.evidenceNote}</p>
+          <p>{humanNote(inspection.evidenceNote)}</p>
           <ul className={styles.list}>
             {inspection.limitations.map((l) => (
-              <li key={l}>{l}</li>
+              <li key={l}>{humanNote(l)}</li>
             ))}
           </ul>
         </>
