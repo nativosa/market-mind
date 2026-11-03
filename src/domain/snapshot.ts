@@ -92,6 +92,17 @@ export interface StoredMetrics {
   spread: Decimal | null;
   midpoint: Decimal | null;
   topSize: Decimal | null;
+  /** Reference book sizes and displayed depth, exactly as stored with this metrics version. */
+  bestBidSize: Decimal | null;
+  bestAskSize: Decimal | null;
+  bidDepth: Decimal | null;
+  askDepth: Decimal | null;
+  /** Depth within `depthBand` of the best price; the band is a per-run setting and may differ between rows. */
+  bidBandDepth: Decimal | null;
+  askBandDepth: Decimal | null;
+  depthBand: Decimal | null;
+  bidLevels: number | null;
+  askLevels: number | null;
   state: BookState | null;
   quality: BookQuality;
   pairSkewMs: number;
@@ -121,6 +132,29 @@ export interface HistoryPoint {
   endDate: string | null;
   books: StoredBookSummary[];
   metrics: StoredMetrics | null;
+}
+
+/** A market with stored observations, as listed for browsing (newest observation describes it). */
+export interface StoredMarket {
+  gammaId: string;
+  conditionId: string;
+  protocolVersion: ProtocolVersion;
+  /** Observations of this market (each counted once, whatever its books or metrics). */
+  observations: number;
+  liveObservations: number;
+  syntheticObservations: number;
+  firstAvailableAt: string;
+  lastAvailableAt: string;
+  latest: {
+    observationId: number;
+    runId: string;
+    sourceType: SourceType;
+    runStatus: RunStatus;
+    question: string;
+    outcomeLabels: string[];
+    active: boolean;
+    closed: boolean;
+  };
 }
 
 export interface RunRecord {

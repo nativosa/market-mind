@@ -67,6 +67,11 @@ const medianNumber = (sorted: readonly number[]): number | null => {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 };
 
+/** A gap between consecutive usable samples is irregular when it exceeds twice the median gap. */
+export function isIrregularGap(gapMs: number | null, medianGapMs: number | null): boolean {
+  return gapMs !== null && medianGapMs !== null && gapMs > 2 * medianGapMs;
+}
+
 const stateKey = (p: HistoryPoint) => p.books.map((b) => `${b.outcomeIndex}:${b.contentHash}`).join("|");
 
 /** Sample-count statistics over every usable sample of an ascending (oldest first) series. */
@@ -126,7 +131,7 @@ export function computeHistoryStats(points: readonly HistoryPoint[], threshold: 
       minMs: sortedGaps[0] ?? null,
       medianMs: medianGap,
       maxMs: sortedGaps.at(-1) ?? null,
-      irregular: medianGap === null ? 0 : gaps.filter((g) => g > 2 * medianGap).length,
+      irregular: gaps.filter((g) => isIrregularGap(g, medianGap)).length,
     },
     states: { n: usable.length, distinct },
   };

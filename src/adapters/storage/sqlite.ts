@@ -76,7 +76,8 @@ export interface OpenOptions {
 
 /**
  * Open a database. Writers get WAL and a bounded WAL file; everyone gets foreign keys and a busy
- * timeout. A read-only open of a missing file fails without creating it.
+ * timeout. A read-only open of a missing file fails without creating it, and is also query_only, so
+ * even a statement that tried to write would be refused.
  */
 export function openDatabase(options: OpenOptions): Database {
   let db: Database;
@@ -90,7 +91,9 @@ export function openDatabase(options: OpenOptions): Database {
     throw toStorageError(error, `Cannot open database ${options.path}`);
   }
   try {
-    if (!options.readOnly) {
+    if (options.readOnly) {
+      db.exec("PRAGMA query_only = 1");
+    } else {
       db.exec("PRAGMA journal_mode = WAL");
       db.exec(`PRAGMA journal_size_limit = ${JOURNAL_SIZE_LIMIT_BYTES}`);
     }
@@ -118,6 +121,24 @@ export function immediate<T>(db: Database, fn: () => T): T {
   } catch (error) {
     if (db.isTransaction) db.exec("ROLLBACK");
     throw toStorageError(error, "Write transaction rolled back");
+  }
+}
+
+/**
+ * Run `fn`'s reads inside one deferred read transaction, so every statement sees the same database
+ * state even while a collection commits concurrently (WAL: readers never block the writer).
+ */
+export function readSnapshot<T>(db: Database, fn: () => T): T {
+  if (db.isTransaction) throw storageError("NESTED_TRANSACTION", "A transaction is already open on this connection");
+  try {
+    db.exec("BEGIN");
+  } catch (error) {
+    throw toStorageError(error, "Cannot start read transaction");
+  }
+  try {
+    return fn();
+  } finally {
+    if (db.isTransaction) db.exec("COMMIT");
   }
 }
 

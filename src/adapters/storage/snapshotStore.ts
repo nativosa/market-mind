@@ -15,6 +15,7 @@ import {
   type RunRecord,
   type RunStatus,
   type SourceType,
+  type StoredMarket,
 } from "../../domain/snapshot.js";
 import type { ProtocolVersion } from "../../domain/market.js";
 import type { Liveness } from "./processLiveness.js";
@@ -532,8 +533,14 @@ const RunRow = z.object({
 
 const parseJson = <T>(value: string | null): T | null => (value === null ? null : (JSON.parse(value) as T));
 
-export function listRuns(db: Database, limit: number): RunRecord[] {
-  return all(db, "SELECT * FROM collection_run ORDER BY started_at DESC, rowid DESC LIMIT ?", limit).map(toRunRecord);
+/** Most recent runs, newest first; without `includeSynthetic` only live runs are read. */
+export function listRuns(db: Database, limit: number, includeSynthetic = true): RunRecord[] {
+  return all(
+    db,
+    "SELECT * FROM collection_run WHERE (? = 1 OR source_type = 'live') ORDER BY started_at DESC, rowid DESC LIMIT ?",
+    includeSynthetic ? 1 : 0,
+    limit,
+  ).map(toRunRecord);
 }
 
 function toRunRecord(raw: unknown): RunRecord {
@@ -593,6 +600,15 @@ const HistoryRow = z.object({
   spread: nullableString,
   midpoint: nullableString,
   top_size: nullableString,
+  best_bid_size: nullableString,
+  best_ask_size: nullableString,
+  bid_depth: nullableString,
+  ask_depth: nullableString,
+  bid_band_depth: nullableString,
+  ask_band_depth: nullableString,
+  depth_band: nullableString,
+  bid_levels: z.number().nullable(),
+  ask_levels: z.number().nullable(),
   book_state: z.enum(["two-sided", "bid-only", "ask-only", "empty"]).nullable(),
   m_quality: z.enum(["valid", "incomplete", "suspicious", "invalid"]).nullable(),
   pair_skew_ms: z.number().nullable(),
@@ -631,7 +647,9 @@ export function readHistory(db: Database, q: HistoryQuery): HistoryPoint[] {
     `SELECT mo.id, mo.run_id, r.status AS run_status, r.source_type, mo.available_at, mo.available_at_ms, mo.availability_basis,
             mo.pairing, mo.association, mo.bucket, mo.reasons_json, mo.question, mo.outcome_labels_json, mo.active, mo.closed,
             mo.accepting_orders, mo.end_date,
-            mm.analytics_version, mm.reference_index, mm.best_bid, mm.best_ask, mm.spread, mm.midpoint, mm.top_size, mm.book_state,
+            mm.analytics_version, mm.reference_index, mm.best_bid, mm.best_ask, mm.spread, mm.midpoint, mm.top_size,
+            mm.best_bid_size, mm.best_ask_size, mm.bid_depth, mm.ask_depth, mm.bid_band_depth, mm.ask_band_depth, mm.depth_band,
+            mm.bid_levels, mm.ask_levels, mm.book_state,
             mm.quality AS m_quality, mm.pair_skew_ms, mm.computed_at, mm.computed_by
      FROM market_observation mo
      JOIN collection_run r ON r.run_id = mo.run_id
@@ -690,6 +708,15 @@ export function readHistory(db: Database, q: HistoryQuery): HistoryPoint[] {
             spread: readDec(r.spread),
             midpoint: readDec(r.midpoint),
             topSize: readDec(r.top_size),
+            bestBidSize: readDec(r.best_bid_size),
+            bestAskSize: readDec(r.best_ask_size),
+            bidDepth: readDec(r.bid_depth),
+            askDepth: readDec(r.ask_depth),
+            bidBandDepth: readDec(r.bid_band_depth),
+            askBandDepth: readDec(r.ask_band_depth),
+            depthBand: readDec(r.depth_band),
+            bidLevels: r.bid_levels,
+            askLevels: r.ask_levels,
             state: r.book_state,
             quality: r.m_quality!,
             pairSkewMs: r.pair_skew_ms!,
@@ -697,6 +724,99 @@ export function readHistory(db: Database, q: HistoryQuery): HistoryPoint[] {
             computedBy: r.computed_by!,
           },
   }));
+}
+
+const StoredMarketRow = z.object({
+  gamma_id: z.string(),
+  condition_id: z.string(),
+  protocol_version: z.enum(["v1", "v2"]),
+  observations: z.number(),
+  live_observations: z.number(),
+  synthetic_observations: z.number(),
+  first_available_at: z.string(),
+  last_available_at: z.string(),
+  latest_id: z.number(),
+  latest_run_id: z.string(),
+  latest_source_type: z.enum(["live", "synthetic"]),
+  latest_run_status: z.enum(["running", "complete", "partial", "interrupted", "failed"]),
+  question: z.string(),
+  outcome_labels_json: z.string(),
+  active: flag,
+  closed: flag,
+});
+
+export interface StoredMarketsQuery {
+  includeSynthetic: boolean;
+  /** Markets to read (callers ask for one more than they show to learn whether more exist). */
+  limit: number;
+  offset: number;
+}
+
+/**
+ * One page of the markets that have stored observations, most recently observed first. A single
+ * statement: counts are of observations (no metrics join), and the newest and oldest observation of
+ * each market on the page are picked with window functions, never with a query per market.
+ */
+export function listStoredMarkets(db: Database, q: StoredMarketsQuery): StoredMarket[] {
+  return all(
+    db,
+    `WITH obs AS (
+       SELECT mo.id, mo.gamma_id, mo.available_at_ms, r.source_type
+       FROM market_observation mo JOIN collection_run r ON r.run_id = mo.run_id
+       WHERE (? = 1 OR r.source_type = 'live')
+     ),
+     page AS (
+       SELECT gamma_id, COUNT(*) AS observations,
+              SUM(source_type = 'live') AS live_observations, SUM(source_type = 'synthetic') AS synthetic_observations,
+              MAX(available_at_ms) AS last_ms
+       FROM obs GROUP BY gamma_id
+       ORDER BY last_ms DESC, gamma_id DESC
+       LIMIT ? OFFSET ?
+     ),
+     ranked AS (
+       SELECT gamma_id, id,
+              ROW_NUMBER() OVER (PARTITION BY gamma_id ORDER BY available_at_ms DESC, id DESC) AS newest,
+              ROW_NUMBER() OVER (PARTITION BY gamma_id ORDER BY available_at_ms ASC, id ASC) AS oldest
+       FROM obs WHERE gamma_id IN (SELECT gamma_id FROM page)
+     )
+     SELECT p.gamma_id, m.condition_id, m.protocol_version, p.observations, p.live_observations, p.synthetic_observations,
+            fo.available_at AS first_available_at, lo.available_at AS last_available_at,
+            lo.id AS latest_id, lo.run_id AS latest_run_id, lr.source_type AS latest_source_type, lr.status AS latest_run_status,
+            lo.question, lo.outcome_labels_json, lo.active, lo.closed
+     FROM page p
+     JOIN market m ON m.gamma_id = p.gamma_id
+     JOIN ranked rn ON rn.gamma_id = p.gamma_id AND rn.newest = 1
+     JOIN market_observation lo ON lo.id = rn.id
+     JOIN collection_run lr ON lr.run_id = lo.run_id
+     JOIN ranked ro ON ro.gamma_id = p.gamma_id AND ro.oldest = 1
+     JOIN market_observation fo ON fo.id = ro.id
+     ORDER BY p.last_ms DESC, p.gamma_id DESC`,
+    q.includeSynthetic ? 1 : 0,
+    q.limit,
+    q.offset,
+  ).map((raw) => {
+    const r = StoredMarketRow.parse(raw);
+    return {
+      gammaId: r.gamma_id,
+      conditionId: r.condition_id,
+      protocolVersion: r.protocol_version,
+      observations: r.observations,
+      liveObservations: r.live_observations,
+      syntheticObservations: r.synthetic_observations,
+      firstAvailableAt: r.first_available_at,
+      lastAvailableAt: r.last_available_at,
+      latest: {
+        observationId: r.latest_id,
+        runId: r.latest_run_id,
+        sourceType: r.latest_source_type,
+        runStatus: r.latest_run_status,
+        question: r.question,
+        outcomeLabels: JSON.parse(r.outcome_labels_json) as string[],
+        active: r.active === 1,
+        closed: r.closed === 1,
+      },
+    };
+  });
 }
 
 // ---------------------------------------------------------------- reconstruction for recomputation
