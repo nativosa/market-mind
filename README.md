@@ -33,7 +33,7 @@ It also includes a bounded runner for repeated real investigations. The offline 
 
 **Stage 3.1** (v0.9.0) adds the **Web Explorer**: a local, read-only browser UI (React + Vite, served by a small Node HTTP server on `127.0.0.1`). Browse open markets, search and filter the loaded pages, and compare the two order books of one market with their quality, freshness and provenance. It never trades, and only the local server talks to Polymarket. See [Web Explorer (Stage 3.1)](#web-explorer-stage-31) and [`docs/web-explorer.md`](docs/web-explorer.md).
 
-**Stage 3.2** adds **Stored History** to the Web Explorer: an offline view of what `collect` stored in your local SQLite database, read-only. It lists stored markets and collection runs, charts each market's sampled bid/ask, spread and depth, and opens the exact stored evidence of any observation. `npm run web:demo` shows it with a synthetic, offline demonstration database. See [Stored History (Stage 3.2)](#stored-history-stage-32).
+**Stage 3.2** (v0.10.0) adds **Stored History** to the Web Explorer: an offline view of what `collect` stored in your local SQLite database, read-only. It lists stored markets and collection runs, charts each market's sampled bid/ask, spread and depth, and opens the exact stored evidence of any observation. `npm run web:demo` shows it with a synthetic, offline demonstration database. See [Stored History (Stage 3.2)](#stored-history-stage-32).
 
 > **Disclaimer:** this project is for engineering education only. It does not trade, sign orders, or use wallets, private keys or authenticated endpoints. Nothing it prints is financial advice.
 
